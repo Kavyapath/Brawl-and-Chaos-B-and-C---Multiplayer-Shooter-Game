@@ -477,8 +477,6 @@ void UCombatComponent::Fire()
 	if (CanFire())
 	{
 		bCanFire = false;
-		ServerFire(HitTarget);
-		LocalFire(HitTarget);
 
 		if (EquippedWeapon)
 		{
