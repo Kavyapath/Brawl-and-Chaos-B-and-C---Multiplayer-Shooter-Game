@@ -5,6 +5,9 @@
 #include "Sound/SoundCue.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/SphereComponent.h"
+#include "Blaster/Weapon/WeaponTypes.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 
 APickup::APickup()
 {
@@ -19,10 +22,17 @@ APickup::APickup()
 	OverlapSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	OverlapSphere->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
 	OverlapSphere->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Overlap);
+	OverlapSphere->AddLocalOffset(FVector(0.f,0.f,85.f));
 
 	PickupMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Pickups"));
 	PickupMesh->SetupAttachment(OverlapSphere);
 	PickupMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PickupMesh->SetRelativeScale3D(FVector(5.f, 5.f, 5.f));
+	PickupMesh->SetRenderCustomDepth(true);
+	PickupMesh->SetCustomDepthStencilValue(CUSTUM_DEPTH_PURPLE);
+
+	PickupEffectComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("PickupEffect"));
+	PickupEffectComponent->SetupAttachment(RootComponent);
 
 }
 
@@ -30,12 +40,16 @@ APickup::APickup()
 void APickup::BeginPlay()
 {
 	Super::BeginPlay();
+
 	if (HasAuthority())
 	{
-		OverlapSphere->OnComponentBeginOverlap.AddDynamic(this, &APickup::OnSphereOverlap);
+		GetWorldTimerManager().SetTimer(
+			BindOverlapTimer,
+			this,
+			&ThisClass::BindOverlapTimerFinished,
+			BindOverlapTime);
 	}
-	
-	
+
 }
 
 void APickup::Destroyed()
@@ -48,6 +62,13 @@ void APickup::Destroyed()
 			GetActorLocation());
 
 	}
+	if (PickupEffect)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(this,
+			PickupEffect,
+			GetActorLocation(),
+			GetActorRotation());
+	}
 
 }
 
@@ -55,10 +76,22 @@ void APickup::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* 
 {
 }
 
+void APickup::BindOverlapTimerFinished()
+{
+	
+		OverlapSphere->OnComponentBeginOverlap.AddDynamic(this, &APickup::OnSphereOverlap);
+	
+}
+
 
 void APickup::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (PickupMesh)
+	{
+		PickupMesh->AddWorldRotation(FRotator(0.f, BaseTurnRate * DeltaTime, 0.f));
+	}
 
 }
 

@@ -26,11 +26,13 @@ public:
 	friend class ANoviceCharacter;//giving full access of this class to NoviceCharacter Class
 
 	void EquipWeapon(AWeapon* Weapon);
+	void SwapWeapons();
 	void ReloadEmptyWeapon();
-	void PlayEquipSound();
+	void PlayEquipSound(AWeapon* Weapon);
 	void UpdateCarriedAmmo();
 	void AttachActorToRightHand(AActor* ActorToAttach);
 	void AttachActorToLeftHand(AActor* ActorToAttach);
+	void AttachActorToBackpack(AActor* ActorToAttach);
 	void DroppedEquippedWeapon();
 	void Reload();
 	UFUNCTION(BlueprintCallable)
@@ -48,6 +50,8 @@ public:
 	void ShotgunShellReload();
 
 	void JumpToShotgunEnd();
+
+	void PickupAmmo(EWeaponTypes WeaponTypes, int32 AmmoAmount);
 protected:
 
 	virtual void BeginPlay() override;
@@ -67,9 +71,20 @@ protected:
 	UFUNCTION()
 	void OnRep_EquippedWeapon();
 
+	UFUNCTION()
+	void OnRep_SecondaryEquippedWeapon();
+	
+	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeapon)
+	AWeapon* EquippedWeapon;
+
+	UPROPERTY(ReplicatedUsing = OnRep_SecondaryEquippedWeapon)
+	AWeapon* SecondaryEquippedWeapon;
 
 
 	void Fire();
+	void FireProjectileWeapon();
+	void FireHitScanWeapon();
+	void FireShotgun();
 
 	UFUNCTION(Server, Reliable)
 	void ServerFire(const FVector_NetQuantize& TraceHitTarget);
@@ -77,6 +92,14 @@ protected:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastFire(const FVector_NetQuantize& TraceHitTarget);
 
+	void LocalFire(const FVector_NetQuantize& TraceHitTarget);
+	void LocalShotgunFire(const TArray<FVector_NetQuantize>& TraceHitTargets);
+	UFUNCTION(Server,Reliable)
+	void ServerShotgunFire(const TArray<FVector_NetQuantize>& TraceHitTargets);
+	
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastShotgunFire(const TArray<FVector_NetQuantize>& TraceHitTargets);
+	
 	void TraceUnderCrosshairs(FHitResult& TraceHitResult);
 
 	void SetHUDCrosshairs(float DeltaTime);
@@ -88,8 +111,8 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerLaunchGrenade(const FVector_NetQuantize& Target);
 	void ShowAttachedGrenade(bool bShowGrenade);
-
-	void PickupAmmo(EWeaponTypes WeaponTypes, int32 AmmoAmount);
+	void EquipPrimaryWeapon(AWeapon* WeaponToEquip);
+	void EquipSecondaryWeapon(AWeapon* WeaponToEquip);
 
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<class AProjectile> GrenadeClass;
@@ -101,8 +124,7 @@ private:
 	UPROPERTY()
 	class ANoviceHUD* HUD;
 
-	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeapon)
-	AWeapon* EquippedWeapon;
+
 
 	UPROPERTY(Replicated)
 	bool bAiming;
@@ -142,10 +164,7 @@ private:
 	void InterpFOV(float DeltaTime);
 	
 	
-	void AimDownSights();
 
-	
-	void StopsAimDownSights();
 	/*
 	Automatic Fire
 	*/
@@ -164,6 +183,9 @@ private:
 	//Carried ammo for the currently equipped weapon
 	UPROPERTY(ReplicatedUsing=OnRep_CarriedAmmo)
 	int32 CarriedAmmo;
+
+	UPROPERTY(EditAnywhere)
+	int32 MaxCarriedAmmo = 500;
 
 	UFUNCTION()
 	 void OnRep_CarriedAmmo();
@@ -217,4 +239,7 @@ private:
 public:
 	FORCEINLINE ECombatState GetCombatState() const { return CombatState; }
 	FORCEINLINE int32 GetGrenades() const { return Grenades; }
-}; 
+	FORCEINLINE int32 GetCarriedAmmo() const { return CarriedAmmo; }
+	 bool ShouldSwapWeapons();
+
+};

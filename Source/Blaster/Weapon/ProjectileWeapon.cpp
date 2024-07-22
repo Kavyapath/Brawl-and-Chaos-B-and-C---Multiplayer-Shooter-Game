@@ -17,7 +17,7 @@ void AProjectileWeapon::Fire(const FVector& HitTarget)
 		//from muzzle flash socket to hit location from TraceUnderCrosshairs
 		FVector ToTarget = HitTarget - SocketTransform.GetLocation();
 		FRotator TargetRotation = ToTarget.Rotation();// to find the rotation of target vector
-		{
+		
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.Owner = GetOwner();
 			SpawnParams.Instigator = GetInstigator();
@@ -29,8 +29,10 @@ void AProjectileWeapon::Fire(const FVector& HitTarget)
 				SpawnParams
 				);
 			}
+
 			
-		}
+			
+		
 	
 	}
 }

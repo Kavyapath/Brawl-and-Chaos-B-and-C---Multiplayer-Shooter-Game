@@ -15,9 +15,12 @@ class BLASTER_API ANovicePlayerController : public APlayerController
 	GENERATED_BODY()
 public:
 	virtual void Tick(float DeltaTime) override;
+	void CheckPing(float DeltaTime);
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const  override;
 
 	void SetHUDHealth(float Health, float MaxHealth);
+	void SetHUDShield(float Shield, float MaxShield);
+
 	void SetHUDScore(float Score);
 	void SetHUDDefeats(int32 Defeats);
 	void SetHUDWeaponAmmo(int32 Ammo);
@@ -58,6 +61,11 @@ protected:
 
 	UFUNCTION(Client, Reliable)
 	void ClientJoinMidGame(FName StateOfMatch, float Warmup, float Match, float StartingTime,float Cooldown);
+
+	void HighPingWarning();
+	void StopHighPingWarning();
+
+
 private:
 
 	void CheckTimeSync(float DeltaTime);
@@ -87,10 +95,43 @@ private:
 	UPROPERTY()
 	class UCharacterOverlay* CharacterOverlay;/// to initialize the character overlay after 10 seconds of waiting time
 
-	bool bInitializeCharacterOverlay=false;
+	
 	float HUDHealth;
+	bool bInitializeHealth = false;
+
 	float HUDMaxHealth;
 	float HUDScore;
+	bool bInitializeScore = false;
+
 	int32 HUDDefeats;
+	bool bInitializeDefeats = false;
+
 	int32 HUDGrenades;
+	bool bInitializeGrenades = false;
+
+	float HUDShield;
+	float HUDMaxShield;
+
+	bool bInitializeShield = false;
+
+	bool bInitializeWeaponAmmo = false;
+	float HUDWeaponAmmo;
+
+	bool bInitializeCarriedAmmo = false;
+	float HUDCarriedAmmo;
+
+
+	float HighPingRunningTime = 0.f;
+
+	UPROPERTY(EditAnywhere)
+	float HighPingDuration = 5.f;
+
+	UPROPERTY(EditAnywhere)
+	float CheckPingFrequency = 10.f;
+
+	UPROPERTY(EditAnywhere)
+	float HighPingThreshold = 50.f;
+
+	UPROPERTY(EditAnywhere)
+	float PingAnimationRunningTime = 0.f;
 };

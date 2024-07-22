@@ -12,12 +12,23 @@ enum class EWeaponState : uint8
 {
 	EWS_InitialState UMETA(DisplayName = "Initial State"),
 	EWS_Equipped UMETA(DisplayName = "Equipped"),
+	EWS_EquippedSecondary UMETA(DisplayName = "EquippedSecondary"),
 	EWS_Dropped UMETA(DisplayName = "Dropped"),
 
 	EWS_Max UMETA(DisplayName = "DefaultMax")
 
 
 
+};
+
+UENUM(BlueprintType)
+enum class EFireTypes :uint8
+{
+	EFT_HitScan UMETA(DisplayName = "HitScan Weapon"),
+	EFT_Projectile UMETA(DisplayName = " Projectile Weapon"),
+	EFT_Shotgun UMETA(DisplayName = " Shotgun Weapon"),
+
+	EWS_Max UMETA(DisplayName = "DefaultMax")
 };
 
 UCLASS()
@@ -36,10 +47,7 @@ public:
 	void Dropped();
 	void SetHUDAmmo();
 	void AddAmmo(int32 AmmoToAdd);
-	void WeaponAimDownSights(APlayerController* Controller);
-
-
-	void WeaponStopsAimDownSights();
+	FVector TraceEndWithScatter(const FVector& HitTarget);
 protected:
 
 	virtual void BeginPlay() override;
@@ -49,8 +57,25 @@ protected:
 	UFUNCTION()
 	virtual void OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
+	virtual void OnWeaponStateSet();
 
-	
+	void OnDropped();
+
+	void OnEquipped();
+	void OnEquippedSecondary();
+
+	/*
+Trace end with scatter
+
+*/
+
+	UPROPERTY(EditAnywhere, Category = "Weapon Scatter")
+	float DistanceToSphere = 800.f;
+
+
+	UPROPERTY(EditAnywhere, Category = "Weapon Scatter")
+	float SphereRadius = 75.f;
+
 
 private:
 	UPROPERTY(VisibleAnywhere,Category="Weapon Properties")
@@ -81,10 +106,6 @@ private:
 	 UFUNCTION()
 	 void OnRep_Ammo();
 
-	 UPROPERTY(VisibleAnywhere, Category = Camera)
-	 class UCameraComponent* FollowCamera;
-	
-
 	 
 	 void SpendRound();
 
@@ -107,7 +128,7 @@ private:
 
 	 UPROPERTY(EditAnywhere)
 	 EWeaponTypes WeaponType;
-	 
+
 
 public:
 	/*
@@ -145,6 +166,14 @@ public:
 	Enabling and sisabling custum depth*/
 
 	void EnabledCustumDepth(bool bEnabled);
+
+	bool bDestroyWeapon = false;
+
+	UPROPERTY(EditAnywhere)
+	EFireTypes FireType;
+
+	UPROPERTY(EditAnywhere, Category = "Weapon Scatter")
+	bool bUseScatter = false;
 
 public:
 	 void SetWeaponState(EWeaponState State);

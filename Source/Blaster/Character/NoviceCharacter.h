@@ -34,6 +34,8 @@ public:
 	void PlayElimMontage();
 	void PlayReloadMontage();
 	void Elim();
+	void DropOrDestroyWeapons();
+	void DropOrDestroyWeapon(AWeapon* Weapon);
 	void PlayThrowGrenadeMontage();
 	UPROPERTY(Replicated)
 	bool bDisableGameplay = false;
@@ -43,7 +45,11 @@ public:
 	UFUNCTION(BlueprintImplementableEvent)
 	void ShowSniperScopeWidget(bool bShowScope);
 
+	void UpdateHUDHealth();
 
+	void UpdateHUDShield();
+
+	void UpdateHUDAmmo();
 
 
 	virtual void OnRep_ReplicatedMovement() override;// its replicated variable is ReplicatedMovement
@@ -52,7 +58,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Destroyed() override;
 	virtual void PossessedBy(AController* NewController) override;
-	void UpdateHUDHealth();
+	
 
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
@@ -119,6 +125,8 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = Camera)
 	class UCameraComponent* FollowCamera;
 
+
+
 	/*
 	Grenade Mesh
 	*/
@@ -143,6 +151,9 @@ private:
 
 	 UPROPERTY(VisibleAnywhere,BlueprintReadOnly,meta=(AllowPrivateAccess="true"))
 	 class UCombatComponent* Combat;
+
+	 UPROPERTY(VisibleAnywhere)
+	 class UBuffComponent* Buff;
 	 /*
 	 animations
 	 */
@@ -213,8 +224,21 @@ private:
 	UPROPERTY(ReplicatedUsing=OnRep_Health,VisibleAnywhere, Category = "Player Stats")
 	float Health = 100.f;
 	// we are replicating the health So every time the health is replicated down to the client
+	
+	/*
+	shield
+	*/
+	UPROPERTY(EditAnywhere, Category = "Player Stats")
+	float MaxShield = 100.f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Shield, EditAnywhere, Category = "Player Stats")
+	float Shield = 0.f;
+
 	UFUNCTION()
-	void OnRep_Health();
+	void OnRep_Shield(float LastShield);
+
+	UFUNCTION()
+	void OnRep_Health(float LastHealth);
 
 	bool bElimmed = false;
 	FTimerHandle ElimTimer;
@@ -291,8 +315,13 @@ private:
 	class USoundCue* ElimBotSound;
 	UPROPERTY()
 	class ANovicePlayerState* NovicePlayerState;
-	
+	/*
+	Default Weapon
+	*/
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<AWeapon> DefaultWeaponClass;
 
+	void SpawnDefaultWeapon();
 public:	
 	void SetOverlappingWeapon(AWeapon* Weapon);
 	 bool IsWeaponEquipped();
@@ -308,6 +337,7 @@ public:
 	 FORCEINLINE bool IsElimmed() const  { return bElimmed; }
 	 FORCEINLINE float GetHealth() const { return Health; }
 	 FORCEINLINE float GetMaxHealth() const { return MaxHealth; }
+	 FORCEINLINE void SetHealth(float Amount) { Health = Amount; }
 	 FORCEINLINE bool GetIsSprinting() const  { return IsSprinting;
 	 }
 	 ECombatState GetCombatState() const;
@@ -318,6 +348,8 @@ public:
 		 return ReloadMontage;
 	 }
 	 FORCEINLINE UStaticMeshComponent* GetAttachedGrenade() const { return AttachedGrenade; }
-	
-
+	 FORCEINLINE UBuffComponent* GetBuffComponent() const { return Buff; }
+	 FORCEINLINE float GetMaxShield() const { return MaxShield; }
+	 FORCEINLINE float GetShield() const { return Shield; }
+	 FORCEINLINE void SetShield(float Amount) { Shield = Amount; }
 };

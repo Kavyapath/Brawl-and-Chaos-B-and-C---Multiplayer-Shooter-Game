@@ -28,6 +28,7 @@
 #include "NiagaraComponent.h"
 #include "Blaster/PlayerState/NovicePlayerState.h"
 #include "Blaster/Weapon/WeaponTypes.h"
+#include "Blaster/BlasterComponent/BuffComponent.h"
  
 ANoviceCharacter::ANoviceCharacter()
 {
@@ -55,6 +56,9 @@ ANoviceCharacter::ANoviceCharacter()
 
 	Combat = CreateDefaultSubobject<UCombatComponent>(TEXT("CombatComponent"));
 	Combat->SetIsReplicated(true);//this is how components are replicated
+
+	Buff = CreateDefaultSubobject<UBuffComponent>(TEXT("BuffComp"));
+	Buff->SetIsReplicated(true);
 
 	AttachedGrenade = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Grenade Mesh"));
 	AttachedGrenade->SetupAttachment(GetMesh(), FName("GrenadeSocket"));
@@ -100,8 +104,10 @@ void ANoviceCharacter::BeginPlay()
 			}
 		}
 	}
-
+	SpawnDefaultWeapon();
+	UpdateHUDAmmo();
 	UpdateHUDHealth();
+	UpdateHUDShield();
 	if (HasAuthority())
 	{
 		OnTakeAnyDamage.AddDynamic(this,&ANoviceCharacter::ReceiveDamage);
@@ -134,6 +140,25 @@ void ANoviceCharacter::UpdateHUDHealth()
 	}
 }
 
+void ANoviceCharacter::UpdateHUDShield()
+{
+	NovicePlayerController = NovicePlayerController == nullptr ? Cast<ANovicePlayerController>(GetController()) : NovicePlayerController;
+	if (NovicePlayerController)
+	{
+		NovicePlayerController->SetHUDShield(Shield, MaxShield);
+	}
+}
+
+void ANoviceCharacter::UpdateHUDAmmo()
+{
+	NovicePlayerController = NovicePlayerController == nullptr ? Cast<ANovicePlayerController>(GetController()) : NovicePlayerController;
+	if (NovicePlayerController &&Combat && Combat->EquippedWeapon)
+	{
+		NovicePlayerController->SetHUDCarriedWeaponAmmo(Combat->CarriedAmmo);
+		NovicePlayerController->SetHUDWeaponAmmo(Combat->EquippedWeapon->GetAmmo());
+	}
+}
+
 void ANoviceCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -142,6 +167,7 @@ void ANoviceCharacter::Tick(float DeltaTime)
 
 	HideCameraIfCharacterClose();
 	PollInit();
+	
 
 
 }
@@ -208,14 +234,7 @@ void ANoviceCharacter::Equip()
 	if (bDisableGameplay) return;
 	if (Combat )
 	{
-		if (HasAuthority())
-		{
-			Combat->EquipWeapon(OverlappingWeapon);
-		}
-		else
-		{
-			ServerEquipButtonPressed();
-		}
+		ServerEquipButtonPressed();
 		
 	}
 
@@ -447,17 +466,37 @@ void ANoviceCharacter::ServerEquipButtonPressed_Implementation()
 {
 	if (Combat)
 	{
+		if (OverlappingWeapon)
+		{
+			Combat->EquipWeapon(OverlappingWeapon);
+		}
+		else if (Combat->ShouldSwapWeapons())
+		{
+			Combat->SwapWeapons();
+		}
 		
-		Combat->EquipWeapon(OverlappingWeapon);
 	}
 }
 
 
-void ANoviceCharacter::OnRep_Health()
+void ANoviceCharacter::OnRep_Shield(float LastShield)
+{
+	UpdateHUDShield();
+	if (Shield < LastShield)
+	{
+		PlayHitReactMontage();
+	}
+}
+
+void ANoviceCharacter::OnRep_Health(float LastHealth)
 {
 	//Rep_Notifies only call on the client
 	UpdateHUDHealth();
-	PlayHitReactMontage();
+	if (Health < LastHealth)
+	{
+		PlayHitReactMontage();
+	}
+	
 }
 
 
@@ -494,6 +533,21 @@ void ANoviceCharacter::StartDissolve()
 		DissolveTimeline->AddInterpFloat(DissolveCurve,DissolveTrack);//all this does is it sets up our time line to use this dissolve curve and associate that curve with our dissolve track which is our call back
 		DissolveTimeline->Play();
 	
+	}
+}
+
+void ANoviceCharacter::SpawnDefaultWeapon()
+{
+	ABlasterGameMode* GameMode = Cast<ABlasterGameMode>(UGameplayStatics::GetGameMode(this));//we return null if we arenot on the server
+	UWorld* World = GetWorld();
+	if (GameMode && World && !bElimmed && DefaultWeaponClass)
+	{
+		AWeapon* StartingWeapon=World->SpawnActor<AWeapon>(DefaultWeaponClass);
+		StartingWeapon->bDestroyWeapon = true;
+		if (Combat)
+		{
+			Combat->EquipWeapon(StartingWeapon);
+		}
 	}
 }
 
@@ -592,6 +646,7 @@ void ANoviceCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(ANoviceCharacter, Health);
 	DOREPLIFETIME(ANoviceCharacter, IsSprinting);
 	DOREPLIFETIME(ANoviceCharacter, bDisableGameplay);
+	DOREPLIFETIME(ANoviceCharacter, Shield);
 
 }
 
@@ -602,6 +657,13 @@ void ANoviceCharacter::PostInitializeComponents()
 	if (Combat)
 	{
 		Combat->NoviceCharacter = this;
+	}
+	if (Buff)
+	{
+		Buff->NoviceCharacter = this;
+		Buff->SetInitialSpeed(GetCharacterMovement()->MaxWalkSpeed, GetCharacterMovement()->MaxWalkSpeedCrouched);
+		Buff->SetInitialJumpSpeed(GetCharacterMovement()->JumpZVelocity);
+	
 	}
 }
 
@@ -678,14 +740,41 @@ void ANoviceCharacter::PlayReloadMontage()
 void ANoviceCharacter::Elim()
 {
 
-	if (Combat && Combat->EquippedWeapon)
-	{
-		Combat->EquippedWeapon->Dropped();
-	}
+	DropOrDestroyWeapons();
 	MulticastElim();
 	
 
 	GetWorldTimerManager().SetTimer(ElimTimer,this, &ANoviceCharacter::ElimTimerFinished, ElimDelayTime);
+}
+
+void ANoviceCharacter::DropOrDestroyWeapons()
+{
+	if (Combat)
+	{
+		if (Combat->EquippedWeapon)
+		{
+			DropOrDestroyWeapon(Combat->EquippedWeapon);
+		}
+		if (Combat->SecondaryEquippedWeapon)
+		{
+			DropOrDestroyWeapon(Combat->SecondaryEquippedWeapon);
+		}
+
+
+	}
+}
+
+void ANoviceCharacter::DropOrDestroyWeapon(AWeapon* Weapon)
+{
+	if (Weapon == nullptr) return;
+
+	if (Weapon->bDestroyWeapon)
+	{
+		Weapon->Destroy();//if we have default weapon with us destroy the weapon
+	}
+	else {
+		Weapon->Dropped();
+	}
 }
 
 void ANoviceCharacter::PlayThrowGrenadeMontage()
@@ -907,8 +996,27 @@ void ANoviceCharacter::GrenadeButtonPressed()
 void ANoviceCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser)
 {
 	if (bElimmed) return;
-	Health = FMath::Clamp(Health - Damage, 0.f, MaxHealth);//health is a replicated variable so it will update down to all clients when  this call on server
+
+	float DamageToHealth = Damage;
+	if (Shield > 0.f)
+	{
+		if (Shield >= Damage)
+		{
+			Shield = FMath::Clamp(Shield-Damage,0.f,MaxShield);
+			DamageToHealth = 0.f;
+		}
+		else
+		{
+			DamageToHealth = FMath::Clamp(DamageToHealth - Shield, 0.f, Damage);
+
+			Shield = 0.f;
+			
+		}
+
+	}
+	Health = FMath::Clamp(Health - DamageToHealth, 0.f, MaxHealth);//health is a replicated variable so it will update down to all clients when  this call on server
 	UpdateHUDHealth();
+	UpdateHUDShield();
 	PlayHitReactMontage();//this function will only be called on clients as we bind this on server only
 	
 	if (Health == 0.f)

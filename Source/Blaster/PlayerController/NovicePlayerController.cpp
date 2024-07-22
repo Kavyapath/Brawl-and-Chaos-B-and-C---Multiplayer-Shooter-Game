@@ -7,6 +7,7 @@
 #include "Blaster/HUD/CharacterOverlay.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "Components/Image.h"
 #include "Blaster/Character/NoviceCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "Blaster/GameMode/BlasterGameMode.h"
@@ -14,6 +15,7 @@
 #include "Blaster/BlasterComponent/CombatComponent.h"
 #include "Blaster/GameState/BlasterGameState.h"
 #include "Blaster/PlayerState/NovicePlayerState.h"
+#include "Blaster/Weapon/Weapon.h"
 
 void ANovicePlayerController::BeginPlay()
 {
@@ -32,7 +34,47 @@ void ANovicePlayerController::Tick(float DeltaTime)
 	SetHUDTime();
 	CheckTimeSync(DeltaTime);   
 	PollInit();
+	CheckPing(DeltaTime);
 	
+}
+
+void ANovicePlayerController::CheckPing(float DeltaTime)
+{
+	HighPingRunningTime += DeltaTime;
+	if (HighPingRunningTime > CheckPingFrequency)
+	{
+		//we will get the ping from our player state
+		if (PlayerState == nullptr)
+		{
+			PlayerState = GetPlayerState<APlayerState>();
+		}
+		else
+		{
+			PlayerState = PlayerState;
+		}
+
+		if (PlayerState)
+		{
+			if (PlayerState->GetPingInMilliseconds() * 4 > HighPingThreshold) //Ping is Compressed it is actually divided by 4
+			{
+				HighPingWarning();
+				PingAnimationRunningTime = 0.f;
+			}
+		}
+
+		HighPingRunningTime = 0.f;
+	}
+	bool bHighPingAnimationPlaying = NoviceHUD &&
+		NoviceHUD->CharacterOverlay &&
+		NoviceHUD->CharacterOverlay->HighPingAnimation;
+	if (bHighPingAnimationPlaying)
+	{
+		PingAnimationRunningTime += DeltaTime;
+		if (PingAnimationRunningTime > HighPingDuration)
+		{
+			StopHighPingWarning();
+		}
+	}
 }
 
 void ANovicePlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -49,14 +91,33 @@ void ANovicePlayerController::SetHUDHealth(float Health, float MaxHealth)
 	{
 		const float HealthPercent = Health / MaxHealth;
 		NoviceHUD->CharacterOverlay->HealthBar->SetPercent(HealthPercent);
-		FString HealthText = FString::Printf(TEXT("%d/%d"),FMath::CeilToInt(Health),FMath::CeilToInt(MaxHealth));
+		FString HealthText = FString::Printf(TEXT("%d/%d"),FMath::CeilToInt(FMath::Clamp(Health,0.f,MaxHealth)),FMath::CeilToInt(MaxHealth));
 		NoviceHUD->CharacterOverlay->HealthText->SetText(FText::FromString(HealthText));
 	}
 	else
 	{
-		bInitializeCharacterOverlay = true;
+		bInitializeHealth = true;
 		HUDHealth = Health;
 		HUDMaxHealth = MaxHealth;
+	}
+}
+
+void ANovicePlayerController::SetHUDShield(float Shield, float MaxShield)
+{
+	NoviceHUD = NoviceHUD = nullptr ? Cast<ANoviceHUD>(GetHUD()) : NoviceHUD;
+	bool bHUDIsValid = NoviceHUD && NoviceHUD->CharacterOverlay && NoviceHUD->CharacterOverlay->ShieldBar && NoviceHUD->CharacterOverlay->ShieldText;
+	if (bHUDIsValid)
+	{
+		const float ShieldPercent = Shield / MaxShield;
+		NoviceHUD->CharacterOverlay->ShieldBar->SetPercent(ShieldPercent);
+		FString ShieldText = FString::Printf(TEXT("%d/%d"), FMath::FMath::CeilToInt(FMath::Clamp(Shield, 0.f, MaxShield)), FMath::CeilToInt(MaxShield));
+		NoviceHUD->CharacterOverlay->ShieldText->SetText(FText::FromString(ShieldText));
+	}
+	else
+	{
+		bInitializeShield = true;
+		HUDShield = Shield;
+		HUDMaxShield = MaxShield;
 	}
 }
 
@@ -72,7 +133,7 @@ void ANovicePlayerController::SetHUDScore(float Score)
 	}
 	else
 	{
-		bInitializeCharacterOverlay = true;
+		bInitializeScore = true;
 		HUDScore = Score;
 	}
 }
@@ -88,7 +149,7 @@ void ANovicePlayerController::SetHUDDefeats(int32 Defeats)
 	}
 	else
 	{
-		bInitializeCharacterOverlay = true;
+		bInitializeDefeats = true;
 		HUDDefeats = Defeats;
 	}
 }
@@ -102,6 +163,11 @@ void ANovicePlayerController::SetHUDWeaponAmmo(int32 Ammo)
 		FString  AmmoText = FString::Printf(TEXT("%d"), Ammo);
 		NoviceHUD->CharacterOverlay->WeaponAmmoAmount->SetText(FText::FromString(AmmoText));
 	}
+	else
+	{
+		bInitializeWeaponAmmo = true;
+		HUDWeaponAmmo = Ammo;
+	}
 }
 
 void ANovicePlayerController::SetHUDCarriedWeaponAmmo(int32 Ammo)
@@ -113,6 +179,11 @@ void ANovicePlayerController::SetHUDCarriedWeaponAmmo(int32 Ammo)
 	{
 		FString  AmmoText = FString::Printf(TEXT("%d"), Ammo);
 		NoviceHUD->CharacterOverlay->CarriedAmmoAmount->SetText(FText::FromString(AmmoText));
+	}
+	else
+	{
+		bInitializeCarriedAmmo = true;
+		HUDCarriedAmmo = Ammo;
 	}
 }
 
@@ -126,6 +197,7 @@ void ANovicePlayerController::SetHUDCarriedGrenade(int32 Grenade)
 		NoviceHUD->CharacterOverlay->GrenadeAmount->SetText(FText::FromString(GrenadeText));
 	}
 	else {
+		bInitializeGrenades = true;
 		HUDGrenades = Grenade;
 	}
 }
@@ -188,6 +260,17 @@ void ANovicePlayerController::OnPossess(APawn* InPawn)
 	{
 		SetHUDHealth(NoviceCharacter->GetHealth(), NoviceCharacter->GetMaxHealth());
 	}
+	if (NoviceCharacter)
+	{
+		SetHUDShield(NoviceCharacter->GetShield(), NoviceCharacter->GetMaxShield());
+	}
+	if (NoviceCharacter)
+	{
+		SetHUDCarriedGrenade(NoviceCharacter->GetCombatComponent()->GetGrenades());
+	}
+
+
+	
 }
 
 void ANovicePlayerController::SetHUDTime()
@@ -243,13 +326,19 @@ void ANovicePlayerController::PollInit()
 			CharacterOverlay = NoviceHUD->CharacterOverlay;
 			if (CharacterOverlay)
 			{
-				SetHUDHealth(HUDHealth, HUDMaxHealth);
-				SetHUDScore(HUDScore);
-				SetHUDDefeats(HUDDefeats);
+				if(bInitializeHealth) SetHUDHealth(HUDHealth, HUDMaxHealth);
+				if (bInitializeShield) SetHUDShield(HUDShield, HUDMaxShield);
+				if (bInitializeScore) SetHUDScore(HUDScore);
+				if (bInitializeDefeats) SetHUDDefeats(HUDDefeats);
+				if (bInitializeCarriedAmmo) SetHUDCarriedWeaponAmmo(HUDCarriedAmmo);
+				if (bInitializeWeaponAmmo)	SetHUDWeaponAmmo(HUDWeaponAmmo);
+				
+	
+				
 				ANoviceCharacter* NoviceCharacter = Cast<ANoviceCharacter>(GetPawn());
 				if (NoviceCharacter && NoviceCharacter->GetCombatComponent())
 				{
-					SetHUDCarriedGrenade(NoviceCharacter->GetCombatComponent()->GetGrenades());
+					if (bInitializeGrenades)SetHUDCarriedGrenade(NoviceCharacter->GetCombatComponent()->GetGrenades());
 				}
 				
 			}
@@ -408,6 +497,35 @@ void ANovicePlayerController::ClientJoinMidGame_Implementation(FName StateOfMatc
 		NoviceHUD->AddAnnouncement();
 	}
 
+}
+
+void ANovicePlayerController::HighPingWarning()
+{
+	NoviceHUD = NoviceHUD = nullptr ? Cast<ANoviceHUD>(GetHUD()) : NoviceHUD;
+	bool bHUDIsValid = NoviceHUD && NoviceHUD->CharacterOverlay && NoviceHUD->CharacterOverlay->HighPingImage && NoviceHUD->CharacterOverlay->HighPingAnimation;
+	if (bHUDIsValid)
+	{
+		NoviceHUD->CharacterOverlay->HighPingImage->SetOpacity(1.f);
+		NoviceHUD->CharacterOverlay->PlayAnimation(NoviceHUD->CharacterOverlay->HighPingAnimation,
+			0.f,
+			5);
+	}
+}
+
+void ANovicePlayerController::StopHighPingWarning()
+{
+	NoviceHUD = NoviceHUD = nullptr ? Cast<ANoviceHUD>(GetHUD()) : NoviceHUD;
+	bool bHUDIsValid = NoviceHUD && NoviceHUD->CharacterOverlay && NoviceHUD->CharacterOverlay->HighPingImage && NoviceHUD->CharacterOverlay->HighPingAnimation;
+	if (bHUDIsValid)
+	{
+		NoviceHUD->CharacterOverlay->HighPingImage->SetOpacity(0.f);
+
+		if (NoviceHUD->CharacterOverlay->IsAnimationPlaying(NoviceHUD->CharacterOverlay->HighPingAnimation))
+		{
+			NoviceHUD->CharacterOverlay->StopAnimation(NoviceHUD->CharacterOverlay->HighPingAnimation);
+		}
+			
+		}
 }
 
 void ANovicePlayerController::CheckTimeSync(float DeltaTime)

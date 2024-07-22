@@ -11,7 +11,8 @@
 #include "Engine/SkeletalMeshSocket.h"
 #include "Blaster/PlayerController/NovicePlayerController.h"
 #include "Blaster/BlasterComponent/CombatComponent.h"
-#include "Camera/CameraComponent.h"
+#include "Kismet/KismetMathLibrary.h"
+
 
 
 AWeapon::AWeapon()
@@ -41,9 +42,7 @@ AWeapon::AWeapon()
 
 
 
-	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
-	FollowCamera->SetupAttachment(WeaponMesh);
-	FollowCamera->bUsePawnControlRotation = false;
+
 
 
 	WeaponMesh->SetCustomDepthStencilValue(CUSTUM_DEPTH_BLUE);//for weapon highlight
@@ -57,14 +56,12 @@ void AWeapon::BeginPlay()
 	Super::BeginPlay();
 
 
-	//if we are on the server
-	if (HasAuthority())
-	{
-		AreaSphere->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		AreaSphere->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Overlap);
-		AreaSphere->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::OnSphereOverlap);
-		AreaSphere->OnComponentEndOverlap.AddDynamic(this, &ThisClass::OnSphereEndOverlap);
-	}
+	AreaSphere->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	AreaSphere->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Overlap);
+	AreaSphere->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::OnSphereOverlap);
+	AreaSphere->OnComponentEndOverlap.AddDynamic(this, &ThisClass::OnSphereEndOverlap);
+
+
 	if (PickupWidget)
 	{
 		PickupWidget->SetVisibility(false);
@@ -98,51 +95,6 @@ void AWeapon::OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActo
 	}
 }
 
-void AWeapon::WeaponAimDownSights(APlayerController* Controller)
-{
-	FollowCamera->Activate();
-	Controller->SetViewTargetWithBlend(this);
-}
-
-void AWeapon::WeaponStopsAimDownSights()
-{
-	FollowCamera->Deactivate();
-}
-
-void AWeapon::OnRep_WeaponState()
-{
-	switch (WeaponState)
-	{
-	case EWeaponState::EWS_Equipped:
-		ShowPickupWidget(false);
-		WeaponMesh->SetSimulatePhysics(false);
-		WeaponMesh->SetEnableGravity(false);
-		WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		if (WeaponType == EWeaponTypes::EWT_SMG)
-		{
-			WeaponMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);//for enabling stips physics
-			WeaponMesh->SetEnableGravity(true);
-			WeaponMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
-		}
-
-		EnabledCustumDepth(false);
-		break;
-	case EWeaponState::EWS_Dropped:
-		WeaponMesh->SetSimulatePhysics(true);
-		WeaponMesh->SetEnableGravity(true);
-		WeaponMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		WeaponMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
-		WeaponMesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Ignore);
-		WeaponMesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
-		
-		WeaponMesh->SetCustomDepthStencilValue(CUSTUM_DEPTH_BLUE);//for weapon highlight
-		WeaponMesh->MarkRenderStateDirty();
-		EnabledCustumDepth(true);
-		break;
-
-	}
-}
-
 void AWeapon::SpendRound()
 {
 	Ammo=FMath::Clamp(Ammo-1,0,MagCapacity);
@@ -172,7 +124,12 @@ void AWeapon::OnRep_Owner()
 	}
 	else
 	{
-		SetHUDAmmo();
+		NoviceOwnerCharacter = NoviceOwnerCharacter == nullptr ? Cast<ANoviceCharacter>(Owner) : NoviceOwnerCharacter;
+		if (NoviceOwnerCharacter && NoviceOwnerCharacter->GetEquippedWeapon() && NoviceOwnerCharacter->GetEquippedWeapon() == this)
+		{
+			SetHUDAmmo();
+		}
+		
 	}
 	
 }
@@ -198,6 +155,36 @@ void AWeapon::AddAmmo(int32 AmmoToAdd)
 
 }
 
+FVector AWeapon::TraceEndWithScatter(const FVector& HitTarget)
+{
+	const USkeletalMeshSocket* MuzzleFlashSocket = GetWeaponMesh()->GetSocketByName("MuzzleFlash");
+	if (MuzzleFlashSocket == nullptr) return FVector();
+
+	const FTransform SocketTransform = MuzzleFlashSocket->GetSocketTransform(GetWeaponMesh());
+	const FVector TraceStart = SocketTransform.GetLocation();
+
+	const FVector ToTargetNormalize = (HitTarget - TraceStart).GetSafeNormal();
+
+	const FVector SphereCenter = TraceStart + ToTargetNormalize * DistanceToSphere;
+
+	const FVector RandVec = UKismetMathLibrary::RandomUnitVector() * FMath::FRandRange(0.f, SphereRadius);
+
+	const FVector EndLoc = SphereCenter + RandVec;
+
+	const FVector ToEndLoc = EndLoc - TraceStart;
+	/*
+		DrawDebugSphere(GetWorld(), SphereCenter, SphereRadius, 12, FColor::Red,true);
+		DrawDebugSphere(GetWorld(), EndLoc, 4.f, 12, FColor::Blue, true);
+
+		DrawDebugLine(GetWorld(), TraceStart,
+			FVector(TraceStart + ToEndLoc * Trace_Lenght / ToEndLoc.Size()),
+		FColor::Cyan,
+			true);
+
+	*/
+	return FVector(TraceStart + ToEndLoc * Trace_Lenght / ToEndLoc.Size());
+}
+
 void AWeapon::EnabledCustumDepth(bool bEnabled)
 {
 	if (WeaponMesh)
@@ -206,48 +193,101 @@ void AWeapon::EnabledCustumDepth(bool bEnabled)
 	}
 }
 
-void AWeapon::SetWeaponState(EWeaponState State)
+void AWeapon::OnWeaponStateSet()
 {
-	WeaponState = State;
 	switch (WeaponState)
 	{
 	case EWeaponState::EWS_Equipped:
-		ShowPickupWidget(false);
-		//we are generating the overlap events for area sphere on the server so after equiping the weapon we will disable its collision on the server so the areaSphere does not generate overlap events with other clients when it is picked by one client
-		AreaSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		WeaponMesh->SetSimulatePhysics(false);
-		WeaponMesh->SetEnableGravity(false);
-		WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		if (WeaponType == EWeaponTypes::EWT_SMG)
-		{
-			WeaponMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);//for enabling stips physics
-			WeaponMesh->SetEnableGravity(true);
-			WeaponMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
-		}
-
-		EnabledCustumDepth(false);
+		OnEquipped();
+		break;
+	case EWeaponState::EWS_EquippedSecondary:
+		OnEquippedSecondary();
 		break;
 	case EWeaponState::EWS_Dropped:
-		if (HasAuthority())
-		{
-			AreaSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		}
-		WeaponMesh->SetSimulatePhysics(true);
-		WeaponMesh->SetEnableGravity(true);
-		WeaponMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		WeaponMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
-		WeaponMesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Ignore);
-		WeaponMesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
-
-
-		WeaponMesh->SetCustomDepthStencilValue(CUSTUM_DEPTH_BLUE);//for weapon highlight
-		WeaponMesh->MarkRenderStateDirty();
-		EnabledCustumDepth(true);
+		OnDropped();
 		break;
+
+
 	}
+}
+
+void AWeapon::OnDropped()
+{
+	if (HasAuthority())
+	{
+		AreaSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	}
+	WeaponMesh->SetSimulatePhysics(true);
+	WeaponMesh->SetEnableGravity(true);
+	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	WeaponMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
+	WeaponMesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Ignore);
+	WeaponMesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+
+
+	WeaponMesh->SetCustomDepthStencilValue(CUSTUM_DEPTH_BLUE);//for weapon highlight
+	WeaponMesh->MarkRenderStateDirty();
+	EnabledCustumDepth(true);
+}
+
+void AWeapon::OnEquipped()
+{
+	ShowPickupWidget(false);
+	//we are generating the overlap events for area sphere on the server so after equiping the weapon we will disable its collision on the server so the areaSphere does not generate overlap events with other clients when it is picked by one client
+	AreaSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WeaponMesh->SetSimulatePhysics(false);
+	WeaponMesh->SetEnableGravity(false);
+	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	if (WeaponType == EWeaponTypes::EWT_SMG)
+	{
+		WeaponMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);//for enabling stips physics
+		WeaponMesh->SetEnableGravity(true);
+		WeaponMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+	}
+
+	EnabledCustumDepth(false);
+
+	
+}
+
+void AWeapon::OnEquippedSecondary()
+{
+	ShowPickupWidget(false);
+	//we are generating the overlap events for area sphere on the server so after equiping the weapon we will disable its collision on the server so the areaSphere does not generate overlap events with other clients when it is picked by one client
+	AreaSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WeaponMesh->SetSimulatePhysics(false);
+	WeaponMesh->SetEnableGravity(false);
+	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	if (WeaponType == EWeaponTypes::EWT_SMG)
+	{
+		WeaponMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);//for enabling stips physics
+		WeaponMesh->SetEnableGravity(true);
+		WeaponMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+	}
+
+	EnabledCustumDepth(true);
+	if (WeaponMesh)
+	{
+		WeaponMesh->SetCustomDepthStencilValue(CUSTUM_DEPTH_TAN);//for weapon highlight
+		WeaponMesh->MarkRenderStateDirty();
+
+	}
+}
+
+
+void AWeapon::SetWeaponState(EWeaponState State)
+{
+	WeaponState = State;
+	OnWeaponStateSet();
 
 
 }
+
+void AWeapon::OnRep_WeaponState()
+{
+	OnWeaponStateSet();
+}
+
 
 bool AWeapon::IsEmpty()
 {
@@ -308,7 +348,11 @@ void AWeapon::Fire(const FVector& HitTarget)
 
 		}
 	}
-	SpendRound();
+	if (HasAuthority())
+	{
+		SpendRound();
+	}
+
 }
 
 void AWeapon::Dropped()
