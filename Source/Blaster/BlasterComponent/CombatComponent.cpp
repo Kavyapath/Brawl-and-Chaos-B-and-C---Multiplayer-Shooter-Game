@@ -139,7 +139,6 @@ void UCombatComponent::EquipSecondaryWeapon(AWeapon* WeaponToEquip)
 
 }
 
-
 void UCombatComponent::ReloadEmptyWeapon()
 {
 	if (EquippedWeapon && EquippedWeapon->IsEmpty())
@@ -217,9 +216,12 @@ void UCombatComponent::DroppedEquippedWeapon()
 
 void UCombatComponent::Reload()
 {
-	if (CarriedAmmo > 0 && CombatState==ECombatState::ECS_Unoccupied && EquippedWeapon && !EquippedWeapon->IsFull())
+	if (CarriedAmmo > 0 && CombatState==ECombatState::ECS_Unoccupied && EquippedWeapon && !EquippedWeapon->IsFull() && !bLocallyReloading)
 	{
+		HandleReload();
 		ServerReload();
+		bLocallyReloading = true;
+		
 
 	}
 }
@@ -228,6 +230,7 @@ void UCombatComponent::FinishReloading()
 {
 	if (NoviceCharacter == nullptr) return;
 
+	bLocallyReloading = false;
 	if (NoviceCharacter->HasAuthority())
 	{
 		CombatState = ECombatState::ECS_Unoccupied;
@@ -287,7 +290,7 @@ void UCombatComponent::ServerLaunchGrenade_Implementation(const FVector_NetQuant
 
 void UCombatComponent::HandleReload()
 {
-	NoviceCharacter->PlayReloadMontage();
+	if(NoviceCharacter) NoviceCharacter->PlayReloadMontage();
 	
 }
 
@@ -311,7 +314,7 @@ void UCombatComponent::ServerReload_Implementation()
 
 	
 	CombatState = ECombatState::ECS_Reloading;//Once it is set here it is replicated down to all the clients and RepNotify will be called for CombatState
-	HandleReload();
+	if(!NoviceCharacter->IsLocallyControlled()) HandleReload();
 	
 }
 
@@ -329,7 +332,7 @@ void UCombatComponent::UpdateAmmoValues()
 	{
 		PlayerController->SetHUDCarriedWeaponAmmo(CarriedAmmo);
 	}
-	EquippedWeapon->AddAmmo(-ReloadAmount);
+	EquippedWeapon->AddAmmo(ReloadAmount);
 }
 
 void UCombatComponent::UpdateShotgunAmmoValues()
@@ -345,7 +348,7 @@ void UCombatComponent::UpdateShotgunAmmoValues()
 	{
 		PlayerController->SetHUDCarriedWeaponAmmo(CarriedAmmo);
 	}
-	EquippedWeapon->AddAmmo(-1);
+	EquippedWeapon->AddAmmo(1);
 	bCanFire = true;
 	//doing this on the server and for client it will be called in onRep_Ammo in the weapon class , and for carried ammo called in the onRep_CarriedAmmo
 	if (EquippedWeapon->IsFull() || CarriedAmmo==0)
@@ -382,7 +385,7 @@ void UCombatComponent::OnRep_CombatState()
 	{
 
 	case ECombatState::ECS_Reloading:
-		HandleReload();
+		if(NoviceCharacter && !NoviceCharacter->IsLocallyControlled()) HandleReload();
 		break;
 	case ECombatState::ECS_Unoccupied:
 			if (bFireButtonPressed)
@@ -616,7 +619,7 @@ void UCombatComponent::FireTimerFinished()
 
 bool UCombatComponent::CanFire()
 {
-	if (EquippedWeapon == nullptr) return false;
+	if (EquippedWeapon == nullptr || bLocallyReloading) return false;
 
 	if (!EquippedWeapon->IsEmpty() && bCanFire && CombatState == ECombatState::ECS_Reloading && EquippedWeapon->GetWeaponType() == EWeaponTypes::EWT_Shotgun) return true;
 
@@ -905,7 +908,7 @@ void UCombatComponent::SetAiming(bool bIsAiming)
 		NoviceCharacter->ShowSniperScopeWidget(bIsAiming);
 	}
 
-
+	if(NoviceCharacter->IsLocallyControlled()) bAimButtonPressed = bIsAiming;
 
 }
 
@@ -916,3 +919,13 @@ void UCombatComponent::ServerSetAiming_Implementation(bool bIsAiming)
 		NoviceCharacter->GetCharacterMovement()->MaxWalkSpeed = bIsAiming ? AimWalkSpeed : BaseWalkSpeed;
 	}
 }
+
+
+void UCombatComponent::OnRep_Aiming()
+{
+	if (NoviceCharacter && NoviceCharacter->IsLocallyControlled())//called on the owning machine
+	{
+		bAiming = bAimButtonPressed;
+	}
+}
+

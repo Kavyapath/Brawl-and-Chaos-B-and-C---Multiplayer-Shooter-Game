@@ -95,23 +95,76 @@ void AWeapon::OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActo
 	}
 }
 
-void AWeapon::SpendRound()
+void AWeapon::AddAmmo(int32 AmmoToAdd)
 {
-	Ammo=FMath::Clamp(Ammo-1,0,MagCapacity);
+	Ammo = FMath::Clamp(Ammo + AmmoToAdd, 0, MagCapacity);
+	SetHUDAmmo();
+	
+	if (HasAuthority())
+	{
+		ClientAddAmmo(AmmoToAdd);
+	}
+
+}
+
+
+void AWeapon::ClientAddAmmo_Implementation(int32 AmmoToAdd)
+{
+
+	if (HasAuthority()) return;
+	Ammo = FMath::Clamp(Ammo + AmmoToAdd, 0, MagCapacity);
+	NoviceOwnerCharacter = NoviceOwnerCharacter == nullptr ? Cast<ANoviceCharacter>(GetOwner()) : NoviceOwnerCharacter;
+	if (NoviceOwnerCharacter && NoviceOwnerCharacter->GetCombatComponent() && IsFull())
+	{
+		NoviceOwnerCharacter->GetCombatComponent()->JumpToShotgunEnd();
+	}
 	SetHUDAmmo();
 
 }
 
+void AWeapon::SpendRound()
+{
+	Ammo=FMath::Clamp(Ammo - 1 ,0,MagCapacity);
+	SetHUDAmmo();
+
+	if (HasAuthority())
+	{
+		ClientUpdateAmmo(Ammo);//server will send the client RPC on all the client machines
+	}
+	else
+	{
+		++Sequence;
+	}
+
+
+}
+
+//client side Prediction or server Reconciliation algorithm
+void AWeapon::ClientUpdateAmmo_Implementation(int32 ServerAmmo)
+{
+	if (HasAuthority()) return;
+	//Storing all the unprocessed request (RPC) in a sequence
+	Ammo = ServerAmmo;
+	//Request answer has come in the form of client RPC from the server
+	--Sequence;
+	Ammo -= Sequence;//we know that we have spent that many rounds
+	SetHUDAmmo();
+}
+
+
+/* using Client side Prediction for ammo
 void AWeapon::OnRep_Ammo()
 {
 	NoviceOwnerCharacter = NoviceOwnerCharacter == nullptr ? Cast<ANoviceCharacter>(GetOwner()) : NoviceOwnerCharacter;
-	
+
 	if (NoviceOwnerCharacter && NoviceOwnerCharacter->GetCombatComponent() && IsFull())
 	{
 		NoviceOwnerCharacter->GetCombatComponent()->JumpToShotgunEnd();
 	}
 	SetHUDAmmo();
 }
+
+*/
 
 void AWeapon::OnRep_Owner()
 {
@@ -146,13 +199,6 @@ void AWeapon::SetHUDAmmo()
 		}
 
 	}
-}
-
-void AWeapon::AddAmmo(int32 AmmoToAdd)
-{
-	Ammo = FMath::Clamp(Ammo - AmmoToAdd,0,MagCapacity);
-	SetHUDAmmo();
-
 }
 
 FVector AWeapon::TraceEndWithScatter(const FVector& HitTarget)
@@ -313,7 +359,7 @@ void AWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeP
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AWeapon, WeaponState);
-	DOREPLIFETIME(AWeapon, Ammo);
+	//DOREPLIFETIME(AWeapon, Ammo);
 }
 
 
@@ -348,10 +394,9 @@ void AWeapon::Fire(const FVector& HitTarget)
 
 		}
 	}
-	if (HasAuthority())
-	{
-		SpendRound();
-	}
+	 SpendRound();
+	
+	
 
 }
 

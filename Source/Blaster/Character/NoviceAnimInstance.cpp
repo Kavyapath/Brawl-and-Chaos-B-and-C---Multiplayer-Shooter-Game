@@ -93,6 +93,10 @@ void UNoviceAnimInstance::NativeUpdateAnimation(float DeltaTime)
 
 
 		bUseFABRIK = NoviceCharacter->GetCombatState() == ECombatState::ECS_Unoccupied;
+		if (NoviceCharacter->IsLocallyControlled() && NoviceCharacter->GetCombatState()!=ECombatState::ECS_ThrowingGrenade)
+		{
+			bUseFABRIK = !NoviceCharacter->IsLocallyReloading();
+		}
 		bUseAimOffset= NoviceCharacter->GetCombatState() == ECombatState::ECS_Unoccupied && !NoviceCharacter->GetDisableGameplay();
 		bTransformRightHand= NoviceCharacter->GetCombatState() == ECombatState::ECS_Unoccupied && !NoviceCharacter->GetDisableGameplay();
 	
