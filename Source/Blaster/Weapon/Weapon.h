@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "WeaponTypes.h"
+#include "Blaster/Enums/Trams.h"
 #include "Weapon.generated.h"
 
 UENUM(BlueprintType)
@@ -44,7 +45,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const  override;
 	virtual void OnRep_Owner() override;
 	virtual void Fire(const FVector& HitTarget);
-	void Dropped();
+	virtual void Dropped();
 	void SetHUDAmmo();
 	void AddAmmo(int32 AmmoToAdd);
 	FVector TraceEndWithScatter(const FVector& HitTarget);
@@ -59,10 +60,10 @@ protected:
 
 	virtual void OnWeaponStateSet();
 
-	void OnDropped();
+	 virtual void OnDropped();
 
-	void OnEquipped();
-	void OnEquippedSecondary();
+	 virtual void OnEquipped();
+	 virtual void OnEquippedSecondary();
 
 	/*
 Trace end with scatter
@@ -77,9 +78,26 @@ Trace end with scatter
 	float SphereRadius = 75.f;
 
 
+	UPROPERTY(EditAnywhere)
+	float Damage = 10.f;
+
+	UPROPERTY(EditAnywhere)
+	float HeadShotDamage = 20.f;
+
+	UPROPERTY(Replicated,EditAnywhere)
+	bool bUseServerSideRewind = false;
+
+	UPROPERTY()
+	class ANoviceCharacter* NoviceOwnerCharacter;
+
+	UPROPERTY()
+	class ANovicePlayerController* NoviceOwnerController;
+
+	UFUNCTION()
+	void OnPingTooHigh(bool bPingTooHigh);
+
 private:
-	UPROPERTY(VisibleAnywhere,Category="Weapon Properties")
-	 USkeletalMeshComponent* WeaponMesh;
+
 
 	UPROPERTY(VisibleAnywhere, Category = "Weapon Properties")
 	 class USphereComponent* AreaSphere;
@@ -136,12 +154,7 @@ private:
 	 UPROPERTY(EditAnywhere)
 	 float ZoomInterpSpeed = 20.f;
 
-	 UPROPERTY()
-	 class ANoviceCharacter* NoviceOwnerCharacter;
-
-	 UPROPERTY()
-	 class ANovicePlayerController* NoviceOwnerController;
-
+ 
 	 UPROPERTY(EditAnywhere)
 	 EWeaponTypes WeaponType;
 
@@ -164,6 +177,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = Crosshairs)
 	UTexture2D* CrosshairLeft;
+
+	UPROPERTY(VisibleAnywhere, Category = "Weapon Properties",BlueprintReadOnly)
+	USkeletalMeshComponent* WeaponMesh;
 
 	/*
 	Automatic Fire
@@ -191,6 +207,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Weapon Scatter")
 	bool bUseScatter = false;
 
+	UPROPERTY(EditAnywhere)
+	ETeams Team;
+
 public:
 	 void SetWeaponState(EWeaponState State);
 	FORCEINLINE USphereComponent* GetAreaSphere() const { return AreaSphere; }
@@ -204,5 +223,8 @@ public:
 	FORCEINLINE EWeaponTypes GetWeaponType() const { return WeaponType; }
 	FORCEINLINE int32 GetAmmo() const { return Ammo; }
 	FORCEINLINE int32 GetMagCapacity() const { return MagCapacity; }
-
+	FORCEINLINE float GetDamage() const { return Damage; }
+	FORCEINLINE float GetHeadShotDamage() const { return HeadShotDamage; }
+	FORCEINLINE UWidgetComponent* GetPickupWidget() const { return PickupWidget; }
+	FORCEINLINE  ETeams GetTeam() const { return Team; }
 };

@@ -31,7 +31,10 @@
 #include "Blaster/BlasterComponent/BuffComponent.h"
 #include "Components/BoxComponent.h"
 #include "Blaster/BlasterComponent/LagCompensationComponent.h"
- 
+#include "Blaster/GameState/BlasterGameState.h"
+#include "Blaster/PlayerStart/TeamPlayerStart.h"
+#include "Blaster/GameMode/LobbyGameMode.h" 
+
 ANoviceCharacter::ANoviceCharacter()
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
@@ -84,100 +87,96 @@ ANoviceCharacter::ANoviceCharacter()
 	Niagara = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara Effect"));
 	Niagara->SetupAttachment(FollowCamera);
 
+	ADSScene=CreateDefaultSubobject<USceneComponent>(TEXT("ADSScene"));
+	ADSScene->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+
 	/*
 	Hit boxes for server side rewind
 	*/
 
 	head = CreateDefaultSubobject<UBoxComponent>(TEXT("head"));
 	head->SetupAttachment(GetMesh(), FName("head"));
-	head->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("head"), head);
 
 	pelvis = CreateDefaultSubobject<UBoxComponent>(TEXT("pelvis"));
 	pelvis->SetupAttachment(GetMesh(), FName("pelvis"));
-	pelvis->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("pelvis"), pelvis);
 
 	spine_02 = CreateDefaultSubobject<UBoxComponent>(TEXT("spine_02"));
 	spine_02->SetupAttachment(GetMesh(), FName("spine_02"));
-	spine_02->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("spine_02"), spine_02);
 
 
 	spine_03 = CreateDefaultSubobject<UBoxComponent>(TEXT("spine_03"));
 	spine_03->SetupAttachment(GetMesh(), FName("spine_03"));
-	spine_03->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("spine_03"), spine_03);
 
 	upperarm_l = CreateDefaultSubobject<UBoxComponent>(TEXT("upperarm_l"));
 	upperarm_l->SetupAttachment(GetMesh(), FName("upperarm_l"));
-	upperarm_l->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("upperarm_l"), upperarm_l);
 
 	upperarm_r = CreateDefaultSubobject<UBoxComponent>(TEXT("upperarm_r"));
 	upperarm_r->SetupAttachment(GetMesh(), FName("upperarm_r"));
-	upperarm_r->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("upperarm_r"), upperarm_r);
 
 
 	lowerarm_l = CreateDefaultSubobject<UBoxComponent>(TEXT("lowerarm_l"));
 	lowerarm_l->SetupAttachment(GetMesh(), FName("lowerarm_l"));
-	lowerarm_l->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("lowerarm_l"), lowerarm_l);
 
 	lowerarm_r = CreateDefaultSubobject<UBoxComponent>(TEXT("lowerarm_r"));
 	lowerarm_r->SetupAttachment(GetMesh(), FName("lowerarm_r"));
-	lowerarm_r->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("lowerarm_r"), lowerarm_r);
 
 	hand_l = CreateDefaultSubobject<UBoxComponent>(TEXT("hand_l"));
 	hand_l->SetupAttachment(GetMesh(), FName("hand_l"));
-	hand_l->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("hand_l"), hand_l);
 
 
 	hand_r = CreateDefaultSubobject<UBoxComponent>(TEXT("hand_r"));
 	hand_r->SetupAttachment(GetMesh(), FName("hand_r"));
-	hand_r->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("hand_r"), hand_r);
 
 	backpack = CreateDefaultSubobject<UBoxComponent>(TEXT("backpack"));
 	backpack->SetupAttachment(GetMesh(), FName("BackpackSocket"));
-	backpack->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("backpack"), backpack);
 
 	thigh_l = CreateDefaultSubobject<UBoxComponent>(TEXT("thigh_l"));
 	thigh_l->SetupAttachment(GetMesh(), FName("thigh_l"));
-	thigh_l->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("thigh_l"), thigh_l);
 
 	thigh_r = CreateDefaultSubobject<UBoxComponent>(TEXT("thigh_r"));
 	thigh_r->SetupAttachment(GetMesh(), FName("thigh_r"));
-	thigh_r->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("thigh_r"), thigh_r);
 
 	calf_l = CreateDefaultSubobject<UBoxComponent>(TEXT("calf_l"));
 	calf_l->SetupAttachment(GetMesh(), FName("calf_l"));
-	calf_l->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("calf_l"), calf_l);
 
 	calf_r = CreateDefaultSubobject<UBoxComponent>(TEXT("calf_r"));
 	calf_r->SetupAttachment(GetMesh(), FName("calf_r"));
-	calf_r->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("calf_r"), calf_r);
 
 
 	foot_l = CreateDefaultSubobject<UBoxComponent>(TEXT("foot_l"));
 	foot_l->SetupAttachment(GetMesh(), FName("foot_l"));
-	foot_l->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("foot_l"), foot_l);
 
 	foot_r = CreateDefaultSubobject<UBoxComponent>(TEXT("foot_r"));
 	foot_r->SetupAttachment(GetMesh(), FName("foot_r"));
-	foot_r->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitCollisionBoxes.Add(FName("foot_r"), foot_r);
 	
-	
+	for (auto&  Box : HitCollisionBoxes)
+	{
+		if (Box.Value)
+		{
+			Box.Value->SetCollisionObjectType(ECC_HitBox);
+			Box.Value->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+			Box.Value->SetCollisionResponseToChannel(ECC_HitBox, ECollisionResponse::ECR_Block);
+			Box.Value->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+ 
+		}
+	}
 	
 }
 
@@ -191,10 +190,44 @@ void ANoviceCharacter::OnRep_ReplicatedMovement()
 	TimeSinceLastMovementReplication = 0.f;
 }
 
+void ANoviceCharacter::MulticastGainedTheLead_Implementation()
+{
+
+	if (CrownSystem == nullptr) return;
+
+	if (CrownComponent==nullptr)
+	{
+		CrownComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
+			CrownSystem,
+			GetMesh(),
+			FName(),
+			GetActorLocation() + FVector(0.f,0.f,110.f),
+			GetActorRotation(),
+			EAttachLocation::KeepWorldPosition,
+			false
+		);
+	}
+	if (CrownComponent)
+	{
+		CrownComponent->Activate();
+	}
+
+	
+}
+
+void ANoviceCharacter::MulticastLostTheLead_Implementation()
+{
+	if (CrownComponent)
+	{
+		CrownComponent->DestroyComponent();
+	}
+
+}
+
 void ANoviceCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
+ 
 	if (!HasAuthority())
 	{
 		if (const APlayerController* PlayerController = Cast<APlayerController>(GetController()))
@@ -217,6 +250,8 @@ void ANoviceCharacter::BeginPlay()
 	{
 		AttachedGrenade->SetVisibility(false);
 	}
+ 
+
 }
 void ANoviceCharacter::PossessedBy(AController* NewController)
 {
@@ -260,6 +295,41 @@ void ANoviceCharacter::UpdateHUDAmmo()
 	}
 }
 
+void ANoviceCharacter::SetTeamColor(ETeams Team)
+{
+	if (GetMesh() == nullptr) return;
+	switch (Team)
+	{
+	case ETeams::ET_NoTeam:
+		break;
+
+	case ETeams::ET_BlueTeam:
+		 ChangeMeshMaterialAccToTeam(HairMaterialBlueTeam, ClothMaterialBlueTeam);
+		break;
+
+	case ETeams::ET_RedTeam:
+		 ChangeMeshMaterialAccToTeam(HairMaterialRedTeam,ClothMaterialRedTeam);
+		break;
+
+	default:
+		break;
+	}
+}
+
+void ANoviceCharacter::ChangeMeshMaterialAccToTeam(UMaterialInstance* HairMaterial, UMaterialInstance* ClothMaterial)
+{
+	if (GetMesh() == nullptr) return;
+	if (HairMaterial)
+	{
+		GetMesh()->SetMaterial(3, HairMaterial);
+	}
+
+	if (ClothMaterial)
+	{
+		GetMesh()->SetMaterial(4, ClothMaterial);
+	}
+}
+
 void ANoviceCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -275,6 +345,16 @@ void ANoviceCharacter::Tick(float DeltaTime)
 
 void ANoviceCharacter::RotateInPlace(float DeltaTime)
 {
+	if (Combat && Combat->bIsHoldingTheFlag)
+	{
+		bUseControllerRotationYaw = false;
+		GetCharacterMovement()->bOrientRotationToMovement = true;
+		TurningInPlace = ETurningInPlace::ETIP_NotTurning;
+		return;
+
+	}
+	if(Combat && Combat->EquippedWeapon) GetCharacterMovement()->bOrientRotationToMovement =false;
+	if (Combat && Combat->EquippedWeapon) bUseControllerRotationYaw = true;
 	if (bDisableGameplay)
 	{
 		bUseControllerRotationYaw = false;
@@ -335,7 +415,18 @@ void ANoviceCharacter::Equip()
 	if (bDisableGameplay) return;
 	if (Combat )
 	{
-		ServerEquipButtonPressed();
+		//if (Combat->bIsHoldingTheFlag) return;
+		if (Combat->CombatState == ECombatState::ECS_Unoccupied)
+		{
+			ServerEquipButtonPressed();
+		}
+		bool bSwap = Combat->ShouldSwapWeapons() && !HasAuthority() && Combat->CombatState == ECombatState::ECS_Unoccupied && OverlappingWeapon == nullptr;
+		if (bSwap)
+		{
+			PlaySwapWeaponMontage();
+			Combat->CombatState = ECombatState::ECS_SwapWeapon;
+			bFinishSwapping = false;
+		}
 		
 	}
 
@@ -344,6 +435,7 @@ void ANoviceCharacter::Equip()
 void ANoviceCharacter::Crouching()
 {
 	if (bDisableGameplay) return;
+	if (Combat && Combat->bIsHoldingTheFlag) return;
 	if (bIsCrouched) 
 	{
 		UnCrouch();
@@ -361,8 +453,9 @@ void ANoviceCharacter::Aim()
 	if (bDisableGameplay) return;
 	if (Combat)
 	{
+		if (Combat->bIsHoldingTheFlag) return;
 		Combat->SetAiming(true);
-		//Combat->AimDownSights();
+		//ADSSightOn();
 		
 	}
 }
@@ -372,8 +465,9 @@ void ANoviceCharacter::AimRelease()
 	if (bDisableGameplay) return;
 	if (Combat)
 	{
+		if (Combat->bIsHoldingTheFlag) return;
 		Combat->SetAiming(false);
-		//Combat->StopsAimDownSights();
+		//ADSSightOff();
 		
 	}
 }
@@ -469,6 +563,7 @@ void ANoviceCharacter::SimProxiesTurn()
 void ANoviceCharacter::Jump()
 {
 	if (bDisableGameplay) return;
+	if (Combat && Combat->bIsHoldingTheFlag) return;
 	if (bIsCrouched) {
 		UnCrouch();
 	}
@@ -480,7 +575,8 @@ void ANoviceCharacter::Jump()
 void ANoviceCharacter::FireButtonPressed()
 {
 	if (bDisableGameplay) return;
-	if (Combat->EquippedWeapon == nullptr) return;
+	if (Combat && Combat->bIsHoldingTheFlag) return;
+	if ( Combat && Combat->EquippedWeapon == nullptr) return;
 	
 	IsSprinting = false;
 	if (Combat) {
@@ -495,6 +591,7 @@ void ANoviceCharacter::FireButtonPressed()
 void ANoviceCharacter::FireButtonReleased()
 {
 	if (bDisableGameplay) return;
+	if (Combat && Combat->bIsHoldingTheFlag) return;
 	if (Combat->EquippedWeapon == nullptr) return;
 	
 	if (Combat) {
@@ -533,11 +630,16 @@ void ANoviceCharacter::HideCameraIfCharacterClose()
 	if (!IsLocallyControlled()) return;
 	if((FollowCamera->GetComponentLocation() - GetActorLocation()).Size() < CameraThreshold)
 	{
-		GetMesh()->SetVisibility(false);
+		 GetMesh()->SetVisibility(false);
 		if (Combat && Combat->EquippedWeapon && Combat->EquippedWeapon->GetWeaponMesh())
 		{
-			Combat->EquippedWeapon->GetWeaponMesh()->bOwnerNoSee = true;//for hiding the weapon mesh
+		 	Combat->EquippedWeapon->GetWeaponMesh()->bOwnerNoSee = true;//for hiding the weapon mesh
 		}
+		if (Combat && Combat->SecondaryEquippedWeapon && Combat->SecondaryEquippedWeapon->GetWeaponMesh())
+		{
+			 Combat->SecondaryEquippedWeapon->GetWeaponMesh()->bOwnerNoSee = true;//for hiding the weapon mesh
+		}
+
 		
 	}
 	else
@@ -615,14 +717,32 @@ void ANoviceCharacter::UpdateDissolveMaterial(float DissolveValue)
 	{
 		DynamicDissolveMaterialInstanceTeeth->SetScalarParameterValue(TEXT("Dissolve"), DissolveValue);
 	}
-	if (DynamicDissolveMaterialInstanceHair)
+	if (NovicePlayerState->GetTeam() == ETeams::ET_RedTeam)
 	{
-		DynamicDissolveMaterialInstanceHair->SetScalarParameterValue(TEXT("Dissolve"), DissolveValue);
+		if (PurpleDynamicDissolveMaterialInstanceHair)
+		{
+			PurpleDynamicDissolveMaterialInstanceHair->SetScalarParameterValue(TEXT("Dissolve"), DissolveValue);
+		}
+		if (PurpleDynamicDissolveMaterialInstanceCloth)
+		{
+			PurpleDynamicDissolveMaterialInstanceCloth->SetScalarParameterValue(TEXT("Dissolve"), DissolveValue);
+		}
 	}
-	if (DynamicDissolveMaterialInstanceCloth)
+	else 
 	{
-		DynamicDissolveMaterialInstanceCloth->SetScalarParameterValue(TEXT("Dissolve"), DissolveValue);
+
+		if (DynamicDissolveMaterialInstanceHair)
+		{
+			DynamicDissolveMaterialInstanceHair->SetScalarParameterValue(TEXT("Dissolve"), DissolveValue);
+		}
+		if (DynamicDissolveMaterialInstanceCloth)
+		{
+			DynamicDissolveMaterialInstanceCloth->SetScalarParameterValue(TEXT("Dissolve"), DissolveValue);
+		}
 	}
+
+
+ 
 }
 
 void ANoviceCharacter::StartDissolve()
@@ -639,9 +759,9 @@ void ANoviceCharacter::StartDissolve()
 
 void ANoviceCharacter::SpawnDefaultWeapon()
 {
-	ABlasterGameMode* GameMode = Cast<ABlasterGameMode>(UGameplayStatics::GetGameMode(this));//we return null if we arenot on the server
+	BlasterGameMode = BlasterGameMode == nullptr ? GetWorld()->GetAuthGameMode<ABlasterGameMode>() : BlasterGameMode;
 	UWorld* World = GetWorld();
-	if (GameMode && World && !bElimmed && DefaultWeaponClass)
+	if (BlasterGameMode && World && !bElimmed && DefaultWeaponClass)
 	{
 		AWeapon* StartingWeapon=World->SpawnActor<AWeapon>(DefaultWeaponClass);
 		StartingWeapon->bDestroyWeapon = true;
@@ -649,6 +769,74 @@ void ANoviceCharacter::SpawnDefaultWeapon()
 		{
 			Combat->EquipWeapon(StartingWeapon);
 		}
+	}
+}
+
+void ANoviceCharacter::ADSSightOn()
+{
+	ABlasterGameMode* GameMode = Cast<ABlasterGameMode>(UGameplayStatics::GetGameMode(this));//we return null if we arenot on the server
+	UWorld* World = GetWorld();
+	if (ADSWeapon == nullptr && GameMode && World && !bElimmed && WeaponClass)
+	{
+		ADSWeapon = World->SpawnActor<AWeapon>(WeaponClass);
+		const FAttachmentTransformRules& AttachmentRules = FAttachmentTransformRules::SnapToTargetNotIncludingScale;
+		FollowCamera->AttachToComponent(ADSScene, AttachmentRules);
+		ADSWeapon->SetActorLocationAndRotation(ADSScene->GetRelativeLocation(), ADSScene->GetRelativeRotation());
+		
+	}
+
+	if (ADSWeapon)
+	{
+		ADSWeapon->GetWeaponMesh()->SetVisibility(true);
+	}
+
+	if (GetMesh())
+	{
+		GetMesh()->SetVisibility(false);
+	}
+	if (Combat && Combat->EquippedWeapon && Combat->EquippedWeapon->GetWeaponMesh())
+	{
+		Combat->EquippedWeapon->GetWeaponMesh()->SetVisibility(false);
+	}
+
+	if (Combat && Combat->SecondaryEquippedWeapon && Combat->SecondaryEquippedWeapon->GetWeaponMesh())
+	{
+		Combat->SecondaryEquippedWeapon->GetWeaponMesh()->SetVisibility(false);
+	}
+	
+
+}
+
+void ANoviceCharacter::ADSSightOff()
+{
+	if (GetMesh())
+	{
+		GetMesh()->SetVisibility(true);
+	}
+	if (Combat->EquippedWeapon && Combat->EquippedWeapon->GetWeaponMesh())
+	{
+		Combat->EquippedWeapon->GetWeaponMesh()->SetVisibility(true);
+	}
+
+	if (Combat->SecondaryEquippedWeapon && Combat->SecondaryEquippedWeapon->GetWeaponMesh())
+	{
+		Combat->SecondaryEquippedWeapon->GetWeaponMesh()->SetVisibility(true);
+	}
+	if (ADSWeapon)
+	{
+		ADSWeapon->GetWeaponMesh()->SetVisibility(false);
+	}
+
+}
+
+void ANoviceCharacter::ServerLeaveGame_Implementation()
+{
+	 BlasterGameMode = BlasterGameMode==nullptr ? GetWorld()->GetAuthGameMode<ABlasterGameMode>(): BlasterGameMode;
+	NovicePlayerState = NovicePlayerState==nullptr? GetPlayerState<ANovicePlayerState>() : NovicePlayerState;
+	if (BlasterGameMode && NovicePlayerState)
+	{
+		BlasterGameMode->PlayerLeftGame(  NovicePlayerState);
+
 	}
 }
 
@@ -681,6 +869,30 @@ bool ANoviceCharacter::IsAiming()
 	return(Combat && Combat->bAiming);
 }
 
+void ANoviceCharacter::SetSpawnPoint()
+{
+	if (HasAuthority() && NovicePlayerState->GetTeam() != ETeams::ET_NoTeam)
+	{
+		TArray<AActor*> PlayerStarts;
+		UGameplayStatics::GetAllActorsOfClass(this, ATeamPlayerStart::StaticClass(), PlayerStarts );
+		TArray<ATeamPlayerStart*> TeamPlayerStarts;
+		for (auto Start : PlayerStarts)
+		{
+			ATeamPlayerStart* TeamStart = Cast<ATeamPlayerStart>(Start);
+			if (TeamStart && TeamStart->Team == NovicePlayerState->GetTeam())
+			{
+				TeamPlayerStarts.Add(TeamStart);
+			}
+		}
+		if (TeamPlayerStarts.Num() > 0)
+		{
+			ATeamPlayerStart* ChoosenPlayerStart = TeamPlayerStarts[FMath::RandRange(0, TeamPlayerStarts.Num() - 1)];
+			SetActorLocationAndRotation(ChoosenPlayerStart->GetActorLocation(), ChoosenPlayerStart->GetActorRotation());
+		}
+	}
+	 
+}
+
 AWeapon* ANoviceCharacter::GetEquippedWeapon()
 {
 	if(Combat==nullptr) return nullptr;
@@ -699,10 +911,33 @@ ECombatState ANoviceCharacter::GetCombatState() const
 	return Combat->CombatState;
 }
 
+bool ANoviceCharacter::IsHoldingTheFlag() const
+{
+	if (Combat == nullptr) return false;
+	return Combat->bIsHoldingTheFlag;
+	 
+}
+
 bool ANoviceCharacter::IsLocallyReloading()
 {
 	if(Combat == nullptr) return false;
 	return Combat->bLocallyReloading;
+}
+
+ETeams ANoviceCharacter::GetTeam()
+{
+	NovicePlayerState = NovicePlayerState == nullptr ? GetPlayerState<ANovicePlayerState>() : NovicePlayerState;
+	if (NovicePlayerState == nullptr) return ETeams::ET_NoTeam;
+
+	return NovicePlayerState->GetTeam();
+}
+
+void ANoviceCharacter::SetbIsHoldingTheFlag(bool bHolding)
+{
+	if (Combat)
+	{
+		Combat->bIsHoldingTheFlag = bHolding;
+	}
 }
 
 
@@ -737,6 +972,8 @@ void ANoviceCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Triggered, this, &ThisClass::ReloadButtonPressed);
 		//throw grenade
 		EnhancedInputComponent->BindAction(GrenadeThrowAction, ETriggerEvent::Triggered, this, &ThisClass::GrenadeButtonPressed);
+
+		EnhancedInputComponent->BindAction(StartGameAction, ETriggerEvent::Triggered, this, &ThisClass::StartGame);
 
 
 	
@@ -852,14 +1089,22 @@ void ANoviceCharacter::PlayReloadMontage()
 
 }
 
-void ANoviceCharacter::Elim()
+void ANoviceCharacter::PlaySwapWeaponMontage()
+{
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && SwapWeaponMontage) {
+		AnimInstance->Montage_Play(SwapWeaponMontage);
+	}
+}
+
+void ANoviceCharacter::Elim(bool bPlayerLeftGame)
 {
 
 	DropOrDestroyWeapons();
-	MulticastElim();
+	MulticastElim(bPlayerLeftGame);
 	
 
-	GetWorldTimerManager().SetTimer(ElimTimer,this, &ANoviceCharacter::ElimTimerFinished, ElimDelayTime);
+	
 }
 
 void ANoviceCharacter::DropOrDestroyWeapons()
@@ -904,9 +1149,9 @@ void ANoviceCharacter::PlayThrowGrenadeMontage()
 	}
 }
 
-void ANoviceCharacter::MulticastElim_Implementation()
+void ANoviceCharacter::MulticastElim_Implementation(bool bPlayerLeftGame)
 {
-
+	bLeftGame = bPlayerLeftGame;
 	if (NovicePlayerController)
 	{
 		NovicePlayerController->SetHUDWeaponAmmo(0);
@@ -938,27 +1183,56 @@ void ANoviceCharacter::MulticastElim_Implementation()
 
 
 	}
-	if (DissolveMaterialInstanceHair) {
-		DynamicDissolveMaterialInstanceHair = UMaterialInstanceDynamic::Create(DissolveMaterialInstanceHair, this);
-		GetMesh()->SetMaterial(3, DynamicDissolveMaterialInstanceHair);
-		DynamicDissolveMaterialInstanceHair->SetScalarParameterValue(TEXT("Dissolve"), 0.55f);
-		DynamicDissolveMaterialInstanceHair->SetScalarParameterValue(TEXT("Glow"), 200.f);
+	if (NovicePlayerState->GetTeam() == ETeams::ET_RedTeam)
+	{
+		if (PurpleDissolveMaterialInstanceHair) {
+			PurpleDynamicDissolveMaterialInstanceHair = UMaterialInstanceDynamic::Create(PurpleDissolveMaterialInstanceHair, this);
+			GetMesh()->SetMaterial(3, PurpleDynamicDissolveMaterialInstanceHair);
+			PurpleDynamicDissolveMaterialInstanceHair->SetScalarParameterValue(TEXT("Dissolve"), 0.55f);
+			PurpleDynamicDissolveMaterialInstanceHair->SetScalarParameterValue(TEXT("Glow"), 200.f);
 
 
+		}
+		if (PurpleDissolveMaterialInstanceCloth) {
+			PurpleDynamicDissolveMaterialInstanceCloth = UMaterialInstanceDynamic::Create(PurpleDissolveMaterialInstanceCloth, this);
+			GetMesh()->SetMaterial(4, PurpleDynamicDissolveMaterialInstanceCloth);
+			PurpleDynamicDissolveMaterialInstanceCloth->SetScalarParameterValue(TEXT("Dissolve"), 0.55f);
+			PurpleDynamicDissolveMaterialInstanceCloth->SetScalarParameterValue(TEXT("Glow"), 200.f);
+
+		}
 	}
-	if (DissolveMaterialInstanceCloth) {
-		DynamicDissolveMaterialInstanceCloth = UMaterialInstanceDynamic::Create(DissolveMaterialInstanceCloth, this);
-		GetMesh()->SetMaterial(4, DynamicDissolveMaterialInstanceCloth);
-		DynamicDissolveMaterialInstanceCloth->SetScalarParameterValue(TEXT("Dissolve"), 0.55f);
-		DynamicDissolveMaterialInstanceCloth->SetScalarParameterValue(TEXT("Glow"), 200.f);
+	else
+	{
+
+		if (DissolveMaterialInstanceHair) {
+			DynamicDissolveMaterialInstanceHair = UMaterialInstanceDynamic::Create(DissolveMaterialInstanceHair, this);
+			GetMesh()->SetMaterial(3, DynamicDissolveMaterialInstanceHair);
+			DynamicDissolveMaterialInstanceHair->SetScalarParameterValue(TEXT("Dissolve"), 0.55f);
+			DynamicDissolveMaterialInstanceHair->SetScalarParameterValue(TEXT("Glow"), 200.f);
 
 
+		}
+		if (DissolveMaterialInstanceCloth) {
+			DynamicDissolveMaterialInstanceCloth = UMaterialInstanceDynamic::Create(DissolveMaterialInstanceCloth, this);
+			GetMesh()->SetMaterial(4, DynamicDissolveMaterialInstanceCloth);
+			DynamicDissolveMaterialInstanceCloth->SetScalarParameterValue(TEXT("Dissolve"), 0.55f);
+			DynamicDissolveMaterialInstanceCloth->SetScalarParameterValue(TEXT("Glow"), 200.f);
+
+
+		}
 	}
+
+	
 	StartDissolve();
 
 	//Disable Character movement
 	GetCharacterMovement()->DisableMovement();
 	GetCharacterMovement()->StopMovementImmediately();
+
+	if (CrownComponent)
+	{
+		CrownComponent->DestroyComponent();
+	}
 
 	bDisableGameplay = true;
 	if (Combat) {
@@ -969,6 +1243,7 @@ void ANoviceCharacter::MulticastElim_Implementation()
 	//Disable Collision
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AttachedGrenade->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	//Spawn ElimBot
 
@@ -992,15 +1267,21 @@ void ANoviceCharacter::MulticastElim_Implementation()
 	{
 		ShowSniperScopeWidget(false);
 	}
+
+	GetWorldTimerManager().SetTimer(ElimTimer, this, &ANoviceCharacter::ElimTimerFinished, ElimDelayTime);
 }
 
 void ANoviceCharacter::ElimTimerFinished()
 {
-	ABlasterGameMode* BlasterGameMode = GetWorld()->GetAuthGameMode<ABlasterGameMode>();
-	if (BlasterGameMode)
+	BlasterGameMode = BlasterGameMode == nullptr ? GetWorld()->GetAuthGameMode<ABlasterGameMode>() : BlasterGameMode;
+	if (BlasterGameMode && !bLeftGame)
 	{
 		BlasterGameMode->RequestRespawn(this,Controller);
 		
+	}
+	if (bLeftGame && IsLocallyControlled())
+	{
+		OnLeftGame.Broadcast();
 	}
 
 	
@@ -1013,7 +1294,7 @@ void ANoviceCharacter::Destroyed()
 		ElimBotComponent->DestroyComponent();//as Character is replicated variable and we are destorying it in the game mode
 	}
 
-	ABlasterGameMode* BlasterGameMode = Cast<ABlasterGameMode>(UGameplayStatics::GetGameMode(this));
+	BlasterGameMode = BlasterGameMode == nullptr ? GetWorld()->GetAuthGameMode<ABlasterGameMode>() : BlasterGameMode;
 	bool bMatchNotInProgress = BlasterGameMode && BlasterGameMode->GetMatchState() != MatchState::InProgress;
 	if (Combat && Combat->EquippedWeapon && bMatchNotInProgress)
 	{
@@ -1066,11 +1347,13 @@ void ANoviceCharacter::ServerSprint_Implementation(bool CanSprint)
 void ANoviceCharacter::StartSprinting()
 {
 	if (FireOn || bDisableGameplay) return;
+	if (Combat && Combat->bIsHoldingTheFlag) return;
 	FVector Zero(0.f, 0.f, 0.f);
 	if (GetCharacterMovement()->Velocity == Zero) {
 		return;
 
 	}
+	
 	Niagara->Activate();
 	Sprint(true);
 	
@@ -1080,7 +1363,7 @@ void ANoviceCharacter::StartSprinting()
 void ANoviceCharacter::StopSprinting()
 {
 	if (bDisableGameplay) return;
-
+	if (Combat && Combat->bIsHoldingTheFlag) return;
 	Niagara->Deactivate();
 
 	Sprint(false);
@@ -1092,6 +1375,7 @@ void ANoviceCharacter::StopSprinting()
 void ANoviceCharacter::ReloadButtonPressed()
 {
 	if (bDisableGameplay) return;
+	if (Combat && Combat->bIsHoldingTheFlag) return;
 	if (Combat)
 	{
 		Combat->Reload();
@@ -1100,19 +1384,36 @@ void ANoviceCharacter::ReloadButtonPressed()
 
 void ANoviceCharacter::GrenadeButtonPressed()
 {
+	if (Combat && Combat->bIsHoldingTheFlag) return;
 	if (Combat)
 	{
 		Combat->ThrowGrenade();
 	}
 }
 
+void ANoviceCharacter::StartGame()
+{
+	 LobbyGameMode= LobbyGameMode == nullptr ? GetWorld()->GetAuthGameMode<ALobbyGameMode>() : LobbyGameMode;
+	if (LobbyGameMode)
+	{
+		ENetRole PlayerRole = GetLocalRole();
+		if (HasAuthority())
+		{
+			LobbyGameMode->StartGameFromServer();
+		}
+	}
+		 
+}
+
 
 
 void ANoviceCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser)
 {
-	if (bElimmed) return;
 
-	float DamageToHealth = Damage;
+	  BlasterGameMode =  BlasterGameMode==nullptr ? GetWorld()->GetAuthGameMode<ABlasterGameMode>():  BlasterGameMode;
+	  if (bElimmed || BlasterGameMode==nullptr) return;
+	  Damage = BlasterGameMode->CalculateDamage(InstigatorController,Controller,Damage);
+	  float DamageToHealth = Damage;
 	if (Shield > 0.f)
 	{
 		if (Shield >= Damage)
@@ -1136,7 +1437,7 @@ void ANoviceCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const U
 	
 	if (Health == 0.f)
 	{
-		ABlasterGameMode* BlasterGameMode = GetWorld()->GetAuthGameMode<ABlasterGameMode>();
+	
 		if(BlasterGameMode)
 		{
 			NovicePlayerController = NovicePlayerController == nullptr ? Cast<ANovicePlayerController>(Controller) : NovicePlayerController;
@@ -1154,10 +1455,25 @@ void ANoviceCharacter::PollInit()
 		NovicePlayerState = GetPlayerState<ANovicePlayerState>();//PlayerState is not initialize at the begining(BeginPlay) of the game it is initiallize after passing some frame so as soon as it initialize we are going to call it in the tick 
 		if (NovicePlayerState)
 		{
-			NovicePlayerState->AddToScore(0.f);
-			NovicePlayerState->AddToDefeats(0);//updating without adding anything after elimination
+			OnPlayerStateInitialize();
+			ABlasterGameState* BlasterGameState = Cast<ABlasterGameState>(UGameplayStatics::GetGameState(this));
+			if (BlasterGameState && BlasterGameState->TopScoringPlayer.Contains(NovicePlayerState))
+			{
+				MulticastGainedTheLead();
+			}
 		}
 	
+	
 	}
+
+	
+}
+
+void ANoviceCharacter::OnPlayerStateInitialize()
+{
+	NovicePlayerState->AddToScore(0.f);
+	NovicePlayerState->AddToDefeats(0);//updating without adding anything after elimination
+	SetTeamColor(NovicePlayerState->GetTeam());
+	SetSpawnPoint();
 }
 

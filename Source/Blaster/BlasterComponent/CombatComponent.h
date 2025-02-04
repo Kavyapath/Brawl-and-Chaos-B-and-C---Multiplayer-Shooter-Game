@@ -32,11 +32,18 @@ public:
 	void UpdateCarriedAmmo();
 	void AttachActorToRightHand(AActor* ActorToAttach);
 	void AttachActorToLeftHand(AActor* ActorToAttach);
+	void AttachFlagToLeftHand(AWeapon* Flag);
 	void AttachActorToBackpack(AActor* ActorToAttach);
 	void DroppedEquippedWeapon();
 	void Reload();
 	UFUNCTION(BlueprintCallable)
 	void FinishReloading();
+
+	UFUNCTION(BlueprintCallable)
+	void FinishSwap();
+
+	UFUNCTION(BlueprintCallable)
+	void FinishSwapAttachWeapon();
 
 	UFUNCTION(BlueprintCallable)
 	void FinishGrenadeThrow();
@@ -53,6 +60,7 @@ public:
 
 	void PickupAmmo(EWeaponTypes WeaponTypes, int32 AmmoAmount);
 	bool bLocallyReloading = false;
+ 
 protected:
 
 	virtual void BeginPlay() override;
@@ -75,28 +83,30 @@ protected:
 	UFUNCTION()
 	void OnRep_SecondaryEquippedWeapon();
 	
-	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeapon)
+	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeapon )
 	AWeapon* EquippedWeapon;
 
-	UPROPERTY(ReplicatedUsing = OnRep_SecondaryEquippedWeapon)
+	UPROPERTY(ReplicatedUsing = OnRep_SecondaryEquippedWeapon )
 	AWeapon* SecondaryEquippedWeapon;
 
+
+ 
 
 	void Fire();
 	void FireProjectileWeapon();
 	void FireHitScanWeapon();
 	void FireShotgun();
 
-	UFUNCTION(Server, Reliable)
-	void ServerFire(const FVector_NetQuantize& TraceHitTarget);
+	UFUNCTION(Server, Reliable,WithValidation)
+	void ServerFire(const FVector_NetQuantize& TraceHitTarget,float FireDelay);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastFire(const FVector_NetQuantize& TraceHitTarget);
 
 	void LocalFire(const FVector_NetQuantize& TraceHitTarget);
 	void LocalShotgunFire(const TArray<FVector_NetQuantize>& TraceHitTargets);
-	UFUNCTION(Server,Reliable)
-	void ServerShotgunFire(const TArray<FVector_NetQuantize>& TraceHitTargets);
+	UFUNCTION(Server,Reliable,WithValidation)
+	void ServerShotgunFire(const TArray<FVector_NetQuantize>& TraceHitTargets,float FireDelay);
 	
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastShotgunFire(const TArray<FVector_NetQuantize>& TraceHitTargets);
@@ -241,6 +251,12 @@ private:
 	int32 MaxGrenades = 5;
 
 	void UpdateHUDGrenades();
+
+	UPROPERTY(ReplicatedUsing= OnRep_bIsHoldingTheFlag)
+	bool bIsHoldingTheFlag = false;
+
+	UFUNCTION()
+	void OnRep_bIsHoldingTheFlag();
 
 public:
 	FORCEINLINE ECombatState GetCombatState() const { return CombatState; }

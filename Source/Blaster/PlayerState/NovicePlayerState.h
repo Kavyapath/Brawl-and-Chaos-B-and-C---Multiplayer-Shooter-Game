@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
+#include "Blaster/Enums/Trams.h"
 #include "NovicePlayerState.generated.h"
 
 /**
@@ -34,5 +35,15 @@ private:
 
 	UPROPERTY(ReplicatedUsing=OnRep_Defeats)
 	int32 Defeats;
+
+	UPROPERTY(ReplicatedUsing=OnRep_Team)
+	ETeams Team = ETeams::ET_NoTeam;
 	
+	UFUNCTION()
+	void OnRep_Team();
+public:
+	UFUNCTION(BlueprintCallable)
+	FORCEINLINE ETeams GetTeam() const { return Team; }
+	void  SetTeam(ETeams TeamToSet);
+
 };

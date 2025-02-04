@@ -16,6 +16,13 @@
 #include "Blaster/GameState/BlasterGameState.h"
 #include "Blaster/PlayerState/NovicePlayerState.h"
 #include "Blaster/Weapon/Weapon.h"
+#include "EnhancedInputSubsystems.h"
+#include "EnhancedInputComponent.h"
+#include "Components/InputComponent.h"
+#include "InputMappingContext.h"
+#include "EnhancedInput/Public/EnhancedInputComponent.h"
+#include"Blaster/HUD/ReturnToMainMenu.h"
+#include "Blaster/Enums/AnnouncementTypes.h"
 
 void ANovicePlayerController::BeginPlay()
 {
@@ -23,10 +30,12 @@ void ANovicePlayerController::BeginPlay()
 
 	NoviceHUD = Cast<ANoviceHUD>(GetHUD());
 	ServerCheckMatchState();
+	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+	{
+		Subsystem->AddMappingContext(DefaultMappingContext, 0);
+	}
 
-
-
-
+ 
 }
 
 void ANovicePlayerController::Tick(float DeltaTime)
@@ -36,6 +45,19 @@ void ANovicePlayerController::Tick(float DeltaTime)
 	PollInit();
 	CheckPing(DeltaTime);
 	
+}
+
+void ANovicePlayerController:: SetupInputComponent()
+{
+	Super::SetupInputComponent();
+	if (InputComponent == nullptr) return;
+
+	//InputComponent->BindAction();
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent)) {
+
+		EnhancedInputComponent->BindAction(ExitAction, ETriggerEvent::Triggered, this, &ANovicePlayerController::ShowReturnToMainMenu);
+
+	}
 }
 
 void ANovicePlayerController::CheckPing(float DeltaTime)
@@ -48,17 +70,26 @@ void ANovicePlayerController::CheckPing(float DeltaTime)
 		{
 			PlayerState = GetPlayerState<APlayerState>();
 		}
-		else
+		else 
 		{
-			PlayerState = PlayerState;
+			 PlayerState= PlayerState;
 		}
+			
+		 
+	 
 
 		if (PlayerState)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("PlayerState->GetPing() * 4 : %f"), PlayerState->GetPingInMilliseconds() * 4);
 			if (PlayerState->GetPingInMilliseconds() * 4 > HighPingThreshold) //Ping is Compressed it is actually divided by 4
 			{
 				HighPingWarning();
 				PingAnimationRunningTime = 0.f;
+				ServerReportPingStatus(true);
+			}
+			else
+			{
+				ServerReportPingStatus(false);
 			}
 		}
 
@@ -76,11 +107,18 @@ void ANovicePlayerController::CheckPing(float DeltaTime)
 		}
 	}
 }
+ 
+void ANovicePlayerController::ServerReportPingStatus_Implementation(bool bHighPing)
+{
+	HighPingDelegate.Broadcast(bHighPing);
+}
+
 
 void ANovicePlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ANovicePlayerController, MatchState);
+	DOREPLIFETIME(ANovicePlayerController, bShowTeamScores);
 }
 
 void ANovicePlayerController::SetHUDHealth(float Health, float MaxHealth)
@@ -255,6 +293,7 @@ float ANovicePlayerController::GetServerTime()
 void ANovicePlayerController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
+
 	ANoviceCharacter* NoviceCharacter = Cast<ANoviceCharacter>(InPawn);
 	if (NoviceCharacter)
 	{
@@ -264,10 +303,12 @@ void ANovicePlayerController::OnPossess(APawn* InPawn)
 	{
 		SetHUDShield(NoviceCharacter->GetShield(), NoviceCharacter->GetMaxShield());
 	}
+ 
 	if (NoviceCharacter)
 	{
-		SetHUDCarriedGrenade(NoviceCharacter->GetCombatComponent()->GetGrenades());
+		 SetHUDCarriedGrenade(NoviceCharacter->GetCombatComponent()->GetGrenades());
 	}
+ 
 
 
 	
@@ -356,7 +397,7 @@ void ANovicePlayerController::ReceivedPlayer()
 	}
 }
 
-void ANovicePlayerController::OnMatchStateSet(FName State)
+void ANovicePlayerController::OnMatchStateSet(FName State,bool bTeamsMatch)
 {
 
 	//when it get called from the client Rpc this function will executed on the server and when the MatchState changes OnRep-MatchState Rep notify will be called on the clients
@@ -365,11 +406,69 @@ void ANovicePlayerController::OnMatchStateSet(FName State)
 
 	if (MatchState == MatchState::InProgress)
 	{
-		HandleMatchHasStarted();
+		HandleMatchHasStarted(bTeamsMatch);
 	}
 	else if (MatchState == MatchState::Cooldown)
 	{
 		HandleCooldown();
+	}
+}
+
+void ANovicePlayerController::HideTeamScore()
+{
+	NoviceHUD = NoviceHUD = nullptr ? Cast<ANoviceHUD>(GetHUD()) : NoviceHUD;
+	bool bHUDIsValid = NoviceHUD && NoviceHUD->CharacterOverlay && NoviceHUD->CharacterOverlay->RedTeamScoreText && NoviceHUD->CharacterOverlay->BlueTeamScoreText && NoviceHUD->CharacterOverlay->Spacer;
+	if (bHUDIsValid)
+	{
+		 
+		NoviceHUD->CharacterOverlay->RedTeamScoreText->SetText(FText());
+		NoviceHUD->CharacterOverlay->BlueTeamScoreText->SetText(FText());
+		NoviceHUD->CharacterOverlay->Spacer->SetText(FText());
+	}
+
+}
+
+void ANovicePlayerController::InitTeamScore()
+{
+
+	NoviceHUD = NoviceHUD = nullptr ? Cast<ANoviceHUD>(GetHUD()) : NoviceHUD;
+	bool bHUDIsValid = NoviceHUD && NoviceHUD->CharacterOverlay && NoviceHUD->CharacterOverlay->RedTeamScoreText && NoviceHUD->CharacterOverlay->BlueTeamScoreText && NoviceHUD->CharacterOverlay->Spacer;
+	if (bHUDIsValid)
+	{
+		FString Zero("0");
+		FString Spacer("|");
+
+		NoviceHUD->CharacterOverlay->RedTeamScoreText->SetText(FText::FromString(Zero));
+		NoviceHUD->CharacterOverlay->BlueTeamScoreText->SetText(FText::FromString(Zero));
+		NoviceHUD->CharacterOverlay->Spacer->SetText(FText::FromString(Spacer));
+	}
+}
+
+void ANovicePlayerController::SetHUDBlueTeamScore(int32 BlueScore)
+{
+	NoviceHUD = NoviceHUD = nullptr ? Cast<ANoviceHUD>(GetHUD()) : NoviceHUD;
+	bool bHUDIsValid = NoviceHUD && NoviceHUD->CharacterOverlay && NoviceHUD->CharacterOverlay->BlueTeamScoreText;
+	if (bHUDIsValid)
+	{
+		FString  ScoreText = FString::Printf(TEXT("%d"),BlueScore);
+
+ 
+		NoviceHUD->CharacterOverlay->BlueTeamScoreText->SetText(FText::FromString(ScoreText));
+ 
+	}
+}
+
+void ANovicePlayerController::SetHUDRedTeamScore(int32 RedScore)
+{
+	NoviceHUD = NoviceHUD = nullptr ? Cast<ANoviceHUD>(GetHUD()) : NoviceHUD;
+	bool bHUDIsValid = NoviceHUD && NoviceHUD->CharacterOverlay && NoviceHUD->CharacterOverlay->RedTeamScoreText;
+	if (bHUDIsValid)
+	{
+		FString  ScoreText = FString::Printf(TEXT("%d"), RedScore);
+
+
+		NoviceHUD->CharacterOverlay->RedTeamScoreText->SetText(FText::FromString(ScoreText));
+
 	}
 }
 
@@ -386,9 +485,10 @@ void ANovicePlayerController::OnRep_MatchState()
 	}
 }
 
-void ANovicePlayerController::HandleMatchHasStarted()
+void ANovicePlayerController::HandleMatchHasStarted(bool bTeamsMatch )
 {
 
+		if(HasAuthority()) bShowTeamScores = bTeamsMatch;
 		NoviceHUD = NoviceHUD == nullptr ? Cast<ANoviceHUD>(GetHUD()) : NoviceHUD;
 		if (NoviceHUD)
 		{
@@ -396,6 +496,15 @@ void ANovicePlayerController::HandleMatchHasStarted()
 			if (NoviceHUD->Announcement)
 			{
 				NoviceHUD->Announcement->SetVisibility(ESlateVisibility::Hidden);
+			}
+			if (!HasAuthority()) return;
+			if (bTeamsMatch)
+			{
+				InitTeamScore();
+			}
+			else
+			{
+				HideTeamScore();
 			}
 		}
 	
@@ -416,7 +525,7 @@ void ANovicePlayerController::HandleCooldown()
 		{
 			NoviceHUD->Announcement->SetVisibility(ESlateVisibility::Visible);
 
-			FString AnnouncementText("New Match Start In:");
+			FString AnnouncementText=  Announcement::NewMatchStartIn;
 			NoviceHUD->Announcement->announcementText->SetText(FText::FromString(AnnouncementText));
 			
 			ABlasterGameState* BlasterGameState =Cast<ABlasterGameState>(UGameplayStatics:: GetGameState(this));
@@ -424,28 +533,8 @@ void ANovicePlayerController::HandleCooldown()
 			if (BlasterGameState && NovicePlayerState)
 			{
 				TArray<ANovicePlayerState*> TopPlayers = BlasterGameState->TopScoringPlayer;
-				FString InfoTextString;
-				if (TopPlayers.Num() == 0)
-				{
-					InfoTextString = FString("There is no winner.");
-				}
-				else if (TopPlayers.Num() == 1 && TopPlayers[0] == NovicePlayerState)
-				{
-					InfoTextString = FString("You are the Winner!");
-				}
-				else if (TopPlayers.Num() == 1)
-				{
-					InfoTextString = FString::Printf(TEXT("Winner : %s"), *TopPlayers[0]->GetPlayerName()); //when only one player is in the top
-				}
-				else if (TopPlayers.Num() > 1)
-				{
-					InfoTextString = FString("Players tied for win: \n");
-					for (auto TiedPlayer : TopPlayers)
-					{
-						InfoTextString.Append(FString::Printf(TEXT("%s\n"), *TiedPlayer->GetPlayerName()));
-					}
-				}
-			
+				FString InfoTextString= bShowTeamScores ? GetTeamInfoText(BlasterGameState) : GetInfoText(TopPlayers);
+				 
 				NoviceHUD->Announcement->InfoText->SetText(FText::FromString(InfoTextString));
 			}
 
@@ -460,6 +549,112 @@ void ANovicePlayerController::HandleCooldown()
 		NoviceCharacter->GetCombatComponent()->FireButtonPressed(false);
 	}
 
+}
+
+FString ANovicePlayerController::GetInfoText(const TArray<class ANovicePlayerState*>& Players)
+{
+	FString InfoTextString;
+	ANovicePlayerState* NovicePlayerState = GetPlayerState<ANovicePlayerState>();
+	if (NovicePlayerState == nullptr) return FString();
+	if (Players.Num() == 0)
+	{
+		InfoTextString = Announcement::ThereIsNoWinner;
+	}
+	else if (Players.Num() == 1 && Players[0] == NovicePlayerState)
+	{
+		InfoTextString = Announcement::YouAreTheWinner;
+	}
+	else if ( Players.Num() == 1)
+	{
+		InfoTextString = FString::Printf(TEXT("Winner : %s"), * Players[0]->GetPlayerName()); //when only one player is in the top
+	}
+	else if ( Players.Num() > 1)
+	{
+		InfoTextString = Announcement::PlayerTiedForTheWin;
+		InfoTextString.Append(FString("\n"));
+		for (auto TiedPlayer :  Players)
+		{
+			InfoTextString.Append(FString::Printf(TEXT("%s\n"), *TiedPlayer->GetPlayerName()));
+		}
+	}
+	return InfoTextString;
+}
+
+FString ANovicePlayerController::GetTeamInfoText(ABlasterGameState* BlasterGameState)
+{
+	if(BlasterGameState==nullptr) return FString();
+
+	FString InfoTextString;
+	const int32 RedTeamScore = BlasterGameState->RedTeamScore;
+	const int32 BlueTeamScore = BlasterGameState->BlueTeamScore;
+
+	if (RedTeamScore == 0 && BlueTeamScore == 0)
+	{
+		InfoTextString = Announcement::ThereIsNoWinner;
+	}
+	else if (RedTeamScore == BlueTeamScore)
+	{
+		InfoTextString = FString::Printf(TEXT("%s\n"), * Announcement::TeamsTiedForTheWin);
+		InfoTextString.Append(Announcement::RedTeam);
+		InfoTextString.Append(TEXT("\n"));
+		InfoTextString.Append(Announcement::BlueTeam);
+		InfoTextString.Append(TEXT("\n"));
+	}
+	else if (RedTeamScore > BlueTeamScore)
+	{
+		InfoTextString = Announcement::RedTeamWin;
+		InfoTextString.Append(TEXT("\n"));
+		InfoTextString.Append(FString::Printf(TEXT("%s:%d\n"), *Announcement::RedTeam,RedTeamScore));
+		InfoTextString.Append(FString::Printf(TEXT("%s:%d\n"), *Announcement::BlueTeam,BlueTeamScore));
+	}
+	else if (RedTeamScore < BlueTeamScore)
+	{
+		InfoTextString = Announcement::BlueTeamWin;
+		InfoTextString.Append(TEXT("\n"));
+		InfoTextString.Append(FString::Printf(TEXT("%s:%d\n"), *Announcement::BlueTeam, BlueTeamScore));
+		InfoTextString.Append(FString::Printf(TEXT("%s:%d\n"), *Announcement::RedTeam, RedTeamScore));
+		
+	}
+	return InfoTextString;
+}
+ 
+void ANovicePlayerController::BroadcastElim(APlayerState* Attacker, APlayerState* Victim)
+{
+	ClientElimAnnouncement(Attacker,Victim);
+}
+   
+void ANovicePlayerController::ClientElimAnnouncement_Implementation(APlayerState* Attacker, APlayerState* Victim)
+{
+	APlayerState* Self = GetPlayerState<APlayerState>();
+	if (Attacker && Victim && Self)
+	{
+		NoviceHUD = NoviceHUD = nullptr ? Cast<ANoviceHUD>(GetHUD()) : NoviceHUD;
+		if (NoviceHUD)
+		{
+			if (Attacker == Self && Victim!=Self)
+			{
+				NoviceHUD->AddElimAnnouncement("You", Victim->GetPlayerName());
+				return;
+			}
+			if (Victim == Self && Attacker != Self)
+			{
+				NoviceHUD->AddElimAnnouncement(Attacker->GetPlayerName(),"You");
+				return;
+			}
+			if (Attacker == Victim && Attacker == Self)
+			{
+				NoviceHUD->AddElimAnnouncement("You", "You");
+				return;
+			}
+			if (Attacker == Victim && Attacker != Self)
+			{
+				NoviceHUD->AddElimAnnouncement(Attacker->GetPlayerName(), "Themseleves");
+				return;
+			}
+			NoviceHUD->AddElimAnnouncement(Attacker->GetPlayerName(), Victim->GetPlayerName());
+
+		}
+	}
 }
 
 void ANovicePlayerController::ServerCheckMatchState_Implementation()
@@ -481,6 +676,7 @@ void ANovicePlayerController::ServerCheckMatchState_Implementation()
 	
 	}
 }
+
 
 void ANovicePlayerController::ClientJoinMidGame_Implementation(FName StateOfMatch,float Warmup,float Match,float StartingTime,float Cooldown)
 {
@@ -528,6 +724,19 @@ void ANovicePlayerController::StopHighPingWarning()
 		}
 }
 
+void ANovicePlayerController::OnRep_bShowTeamScores()
+{
+	if (bShowTeamScores)
+	{
+		InitTeamScore();
+	}
+	else
+	{
+		HideTeamScore();
+	}
+}
+
+
 void ANovicePlayerController::CheckTimeSync(float DeltaTime)
 {
 	TimeSyncRunningTime += DeltaTime;
@@ -539,6 +748,28 @@ void ANovicePlayerController::CheckTimeSync(float DeltaTime)
 	}
 }
 
+void ANovicePlayerController::ShowReturnToMainMenu()
+{
+	if (ReturnToMainMenuWidget == nullptr) return;
+	if (ReturnToMainMenu  == nullptr)
+	{
+		ReturnToMainMenu = CreateWidget<UReturnToMainMenu>(this,ReturnToMainMenuWidget);
+	}
+	if (ReturnToMainMenu)
+	{
+		bReturnToMainMenuOpen = !bReturnToMainMenuOpen;
+		if (bReturnToMainMenuOpen)
+		{
+			ReturnToMainMenu->MenuSetup();
+		}
+		else
+		{
+			ReturnToMainMenu->MenuTearDown();
+		}
+	}
+ 
+}
+
 void ANovicePlayerController::ServerRequestServerTime_Implementation(float TimeOfClientRequest)
 {
 	float ServerTimeOfReceipt = GetWorld()->GetTimeSeconds();
@@ -548,7 +779,8 @@ void ANovicePlayerController::ServerRequestServerTime_Implementation(float TimeO
 void ANovicePlayerController::ClientReportServerTime_Implementation(float TimeOfClientRequest, float TimeServerReceivedClientRequest)
 {
 	float RoundTripTime = GetWorld()->GetTimeSeconds() - TimeOfClientRequest;
-	float CurrentServerTime = TimeServerReceivedClientRequest + (0.5f * RoundTripTime);
+	SingleTripTime= 0.5f * RoundTripTime ;
+	float CurrentServerTime = TimeServerReceivedClientRequest + SingleTripTime;
 	ClientServerDelta = CurrentServerTime - GetWorld()->GetTimeSeconds();
 
 }

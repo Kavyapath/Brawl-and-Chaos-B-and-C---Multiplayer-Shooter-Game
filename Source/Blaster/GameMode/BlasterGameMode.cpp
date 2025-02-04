@@ -69,7 +69,7 @@ void ABlasterGameMode::OnMatchStateSet()
 		ANovicePlayerController* NovicePlayerController = Cast<ANovicePlayerController>(*it);
 		if (NovicePlayerController)
 		{
-			NovicePlayerController->OnMatchStateSet(MatchState);
+			NovicePlayerController->OnMatchStateSet(MatchState,bTeamsMatch);
 		}
 	}
 }
@@ -84,10 +84,38 @@ void ABlasterGameMode::PlayerEliminated(ANoviceCharacter* ElimmedCharacter, ANov
 	
 
 	ABlasterGameState* BlasterGameState = GetGameState<ABlasterGameState>();
+
 	if (AttackerPlayerState && AttackerPlayerState != VictimPlayerState && BlasterGameState)
 	{
+		TArray<ANovicePlayerState*> PlayerCurrentlyInLead;
+
+		for (auto LeadPlayer : BlasterGameState->TopScoringPlayer)
+		{
+			PlayerCurrentlyInLead.Add(LeadPlayer);
+		}
 		AttackerPlayerState->AddToScore(1.f);
 		BlasterGameState->UpdateTopScore(AttackerPlayerState);
+
+		if (BlasterGameState->TopScoringPlayer.Contains(AttackerPlayerState))
+		{
+			ANoviceCharacter* Leader = Cast<ANoviceCharacter>(AttackerPlayerState->GetPawn());
+			if (Leader)
+			{
+				Leader->MulticastGainedTheLead();
+			}
+		}
+
+		for (int32 i = 0; i < PlayerCurrentlyInLead.Num(); i++)
+		{
+			if (!BlasterGameState->TopScoringPlayer.Contains(PlayerCurrentlyInLead[i]))//After update the top Scoring Array is the player is not present in this array so it means they lost the lead
+			{
+				ANoviceCharacter* Loser = Cast<ANoviceCharacter>(PlayerCurrentlyInLead[i]->GetPawn());
+				if (Loser)
+				{
+					Loser->MulticastLostTheLead();
+				 }
+			}
+		}
 	}
 
 	if (VictimPlayerState)
@@ -97,7 +125,17 @@ void ABlasterGameMode::PlayerEliminated(ANoviceCharacter* ElimmedCharacter, ANov
 	
 	if (ElimmedCharacter)
 	{
-		ElimmedCharacter->Elim();
+		ElimmedCharacter->Elim(false);
+	}
+
+	for (FConstPlayerControllerIterator it = GetWorld()->GetPlayerControllerIterator(); it; it++)
+	{
+		ANovicePlayerController* NovicePlayer = Cast<ANovicePlayerController>(*it);
+		if (NovicePlayer && AttackerPlayerState && VictimPlayerState)
+		{
+			NovicePlayer->BroadcastElim(AttackerPlayerState,VictimPlayerState);
+		}
+
 	}
 }
 
@@ -114,6 +152,28 @@ void ABlasterGameMode::RequestRespawn(ACharacter* ElimmedCharacter, AController*
 		UGameplayStatics::GetAllActorsOfClass(this, APlayerStart::StaticClass(),PlayerStarts );//to accessing the components in the world
 		int32 Selection = FMath::RandRange(0,PlayerStarts.Num()-1);
 		RestartPlayerAtPlayerStart(ElimmedController,PlayerStarts[Selection]);//now we are restarting the player at random location from our array of player starts
+	}
+}
+
+float ABlasterGameMode::CalculateDamage(AController* Attacker, AController* Victim, float BaseDamage)
+{
+
+	return BaseDamage;
+}
+
+void ABlasterGameMode::PlayerLeftGame(ANovicePlayerState* PlayerLeaving)
+{
+	//TODO Call elim and passing true for bLeft the game
+	if (PlayerLeaving == nullptr) return;
+	ABlasterGameState* BlasterGameState = GetGameState<ABlasterGameState>();
+	if (BlasterGameState && BlasterGameState->TopScoringPlayer.Contains(PlayerLeaving))
+	{
+		BlasterGameState->TopScoringPlayer.Remove(PlayerLeaving);
+	}
+	ANoviceCharacter* NoviceCharacter=Cast<ANoviceCharacter>(PlayerLeaving->GetPawn());
+	if (NoviceCharacter)
+	{
+		NoviceCharacter->Elim(true);//as the character is leaving the game
 	}
 }
 

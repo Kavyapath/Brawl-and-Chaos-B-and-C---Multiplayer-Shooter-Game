@@ -24,7 +24,8 @@ public:
 	ABlasterGameMode();
 	virtual void  PlayerEliminated(class ANoviceCharacter* ElimmedCharacter,class ANovicePlayerController* VictimController,class ANovicePlayerController* AttackerController);
 	virtual void RequestRespawn(ACharacter* ElimmedCharacter,AController* ElimmedController);
-
+	virtual float CalculateDamage(AController* Attacker, AController* Victim,float BaseDamage);
+	void PlayerLeftGame(class ANovicePlayerState* PlayerLeaving);
 
 	UPROPERTY(EditDefaultsOnly)
 	float WarmupTime = 10.f;
@@ -36,6 +37,8 @@ public:
 	float CooldownTime = 10.f;
 
 	float LevelStartingTime = 0.f;
+
+	bool bTeamsMatch = false;
 
 protected:
 	virtual void BeginPlay() override;

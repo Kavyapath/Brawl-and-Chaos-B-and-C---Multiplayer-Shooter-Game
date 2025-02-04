@@ -21,8 +21,7 @@ protected:
 
 	void WeaponTraceHit(const FVector& TraceStart, const FVector& TraceHitTarget, FHitResult& OutHit);
 
-	UPROPERTY(EditAnywhere)
-	float Damage = 10.f;
+
 
 	UPROPERTY(EditAnywhere)
 	 UParticleSystem* ImpactParticle;
@@ -39,6 +38,7 @@ protected:
 	 UPROPERTY(EditAnywhere)
 	 USoundCue* FireSound;
 
+public:
 
 
 

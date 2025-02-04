@@ -67,6 +67,7 @@ void AWeapon::BeginPlay()
 		PickupWidget->SetVisibility(false);
 	}
 	
+ 
 }
 
 void AWeapon::Tick(float DeltaTime)
@@ -80,7 +81,8 @@ void AWeapon::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* 
 	ANoviceCharacter* NoviceCharacter = Cast<ANoviceCharacter>(OtherActor);
 	if (NoviceCharacter)
 	{
-		
+		if (WeaponType == EWeaponTypes::EWT_Flag && NoviceCharacter->GetTeam() == Team) return;
+		if (NoviceCharacter->IsHoldingTheFlag()) return;
 		NoviceCharacter->SetOverlappingWeapon(this);
 	}
 }
@@ -90,7 +92,8 @@ void AWeapon::OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActo
 	ANoviceCharacter* NoviceCharacter = Cast<ANoviceCharacter>(OtherActor);
 	if (NoviceCharacter)
 	{
-
+		if (WeaponType == EWeaponTypes::EWT_Flag && NoviceCharacter->GetTeam() == Team) return;
+		if (NoviceCharacter->IsHoldingTheFlag()) return;
 		NoviceCharacter->SetOverlappingWeapon(nullptr);
 	}
 }
@@ -274,6 +277,17 @@ void AWeapon::OnDropped()
 	WeaponMesh->SetCustomDepthStencilValue(CUSTUM_DEPTH_BLUE);//for weapon highlight
 	WeaponMesh->MarkRenderStateDirty();
 	EnabledCustumDepth(true);
+
+	NoviceOwnerCharacter = NoviceOwnerCharacter == nullptr ? Cast<ANoviceCharacter>(GetOwner()) : NoviceOwnerCharacter;
+	if (NoviceOwnerCharacter && bUseServerSideRewind)
+	{
+		NoviceOwnerController = NoviceOwnerController == nullptr ? Cast<ANovicePlayerController>(NoviceOwnerCharacter->Controller) : NoviceOwnerController;
+		if (NoviceOwnerController && HasAuthority() && !NoviceOwnerController->HighPingDelegate.IsBound())
+		{
+			NoviceOwnerController->HighPingDelegate.RemoveDynamic(this, &ThisClass::OnPingTooHigh);
+		}
+
+	}
 }
 
 void AWeapon::OnEquipped()
@@ -293,6 +307,16 @@ void AWeapon::OnEquipped()
 
 	EnabledCustumDepth(false);
 
+	NoviceOwnerCharacter = NoviceOwnerCharacter == nullptr ? Cast<ANoviceCharacter>(GetOwner()) : NoviceOwnerCharacter;
+	if (NoviceOwnerCharacter && bUseServerSideRewind)
+	{
+		NoviceOwnerController = NoviceOwnerController == nullptr ? Cast<ANovicePlayerController>(NoviceOwnerCharacter->Controller) : NoviceOwnerController;
+		if (NoviceOwnerController && HasAuthority() && !NoviceOwnerController->HighPingDelegate.IsBound())
+		{
+			NoviceOwnerController->HighPingDelegate.AddDynamic(this,&ThisClass::OnPingTooHigh);
+		}
+
+	}
 	
 }
 
@@ -311,14 +335,26 @@ void AWeapon::OnEquippedSecondary()
 		WeaponMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
 	}
 
-	EnabledCustumDepth(true);
+	 
 	if (WeaponMesh)
 	{
 		WeaponMesh->SetCustomDepthStencilValue(CUSTUM_DEPTH_TAN);//for weapon highlight
 		WeaponMesh->MarkRenderStateDirty();
 
 	}
+
+	NoviceOwnerCharacter = NoviceOwnerCharacter == nullptr ? Cast<ANoviceCharacter>(GetOwner()) : NoviceOwnerCharacter;
+	if (NoviceOwnerCharacter && bUseServerSideRewind)
+	{
+		NoviceOwnerController = NoviceOwnerController == nullptr ? Cast<ANovicePlayerController>(NoviceOwnerCharacter->Controller) : NoviceOwnerController;
+		if (NoviceOwnerController && HasAuthority() && !NoviceOwnerController->HighPingDelegate.IsBound())
+		{
+			NoviceOwnerController->HighPingDelegate.RemoveDynamic(this, &ThisClass::OnPingTooHigh);
+		}
+
+	}
 }
+ 
 
 
 void AWeapon::SetWeaponState(EWeaponState State)
@@ -327,6 +363,11 @@ void AWeapon::SetWeaponState(EWeaponState State)
 	OnWeaponStateSet();
 
 
+}
+
+void AWeapon::OnPingTooHigh(bool bPingTooHigh)
+{
+	bUseServerSideRewind = !bPingTooHigh;
 }
 
 void AWeapon::OnRep_WeaponState()
@@ -360,6 +401,8 @@ void AWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeP
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AWeapon, WeaponState);
 	//DOREPLIFETIME(AWeapon, Ammo);
+	DOREPLIFETIME_CONDITION(AWeapon, bUseServerSideRewind,COND_OwnerOnly);
+
 }
 
 

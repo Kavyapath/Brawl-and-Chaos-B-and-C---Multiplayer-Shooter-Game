@@ -36,7 +36,7 @@ void UNoviceAnimInstance::NativeUpdateAnimation(float DeltaTime)
 	bRotateRootBone = NoviceCharacter->ShouldRotateRootBone();
 	bElimmed = NoviceCharacter->IsElimmed();
 	bSprinting = NoviceCharacter->GetIsSprinting();
-
+	bIsHoldingTheFlag = NoviceCharacter->IsHoldingTheFlag();
 
 	EquippedWeapon = NoviceCharacter->GetEquippedWeapon();
 	//offset Yaw for Strafing
@@ -93,9 +93,10 @@ void UNoviceAnimInstance::NativeUpdateAnimation(float DeltaTime)
 
 
 		bUseFABRIK = NoviceCharacter->GetCombatState() == ECombatState::ECS_Unoccupied;
-		if (NoviceCharacter->IsLocallyControlled() && NoviceCharacter->GetCombatState()!=ECombatState::ECS_ThrowingGrenade)
+		bool bFABRIKOverride = NoviceCharacter->IsLocallyControlled() && NoviceCharacter->GetCombatState() != ECombatState::ECS_ThrowingGrenade && NoviceCharacter->bFinishSwapping;
+		if (bFABRIKOverride)
 		{
-			bUseFABRIK = !NoviceCharacter->IsLocallyReloading();
+			bUseFABRIK = !NoviceCharacter->IsLocallyReloading() ;
 		}
 		bUseAimOffset= NoviceCharacter->GetCombatState() == ECombatState::ECS_Unoccupied && !NoviceCharacter->GetDisableGameplay();
 		bTransformRightHand= NoviceCharacter->GetCombatState() == ECombatState::ECS_Unoccupied && !NoviceCharacter->GetDisableGameplay();

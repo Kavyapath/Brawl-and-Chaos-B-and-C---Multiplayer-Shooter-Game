@@ -4,8 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "InputActionValue.h"
 #include "NovicePlayerController.generated.h"
 
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FHighPingDelegate, bool, bPingTooHigh);
 /**
  * 
  */
@@ -15,6 +18,7 @@ class BLASTER_API ANovicePlayerController : public APlayerController
 	GENERATED_BODY()
 public:
 	virtual void Tick(float DeltaTime) override;
+
 	void CheckPing(float DeltaTime);
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const  override;
 
@@ -30,13 +34,35 @@ public:
 	void SetHUDAnnouncementCountdown(float CountdownTime);
 	virtual float GetServerTime();//synced with server world clock
 	virtual void ReceivedPlayer() override;//Sync with server clock as soon as possible,as soon as client attach with controller it will automatically evoked
-	void OnMatchStateSet(FName State);
+	void OnMatchStateSet(FName State,bool bTeamsMatch=false);
+	void HandleMatchHasStarted(bool bTeamsMatch = false);
+	void HideTeamScore();
+	void InitTeamScore();
+
+	void SetHUDBlueTeamScore(int32 BlueScore);
+	void SetHUDRedTeamScore(int32 RedScore);
+
+	float SingleTripTime=0.f;
+
+	FHighPingDelegate HighPingDelegate;
+
+	void BroadcastElim(APlayerState* Attacker, APlayerState* Victim);// we will call it from the game mode (Server)
+
+
+private:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	class UInputMappingContext* DefaultMappingContext;
+
+	/** Move Input Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	class UInputAction* ExitAction;
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void OnPossess(APawn* InPawn) override;///called automatically when player is possess by the controller
 	void SetHUDTime();
 	void PollInit();
+	virtual void SetupInputComponent() override;
 	/*
 	sync time between client and server
 	*/
@@ -64,11 +90,36 @@ protected:
 
 	void HighPingWarning();
 	void StopHighPingWarning();
+	void ShowReturnToMainMenu();
 
+	UFUNCTION(Client, Reliable)
+	void ClientElimAnnouncement(APlayerState* Attacker, APlayerState* Victim);
 
+	UPROPERTY(ReplicatedUsing=OnRep_bShowTeamScores)
+	bool bShowTeamScores = false;
+
+	UFUNCTION()
+	void OnRep_bShowTeamScores();
+
+	FString GetInfoText(const TArray<class ANovicePlayerState*>& Players);
+	FString GetTeamInfoText(class ABlasterGameState* BlasterGameState);
 private:
 
 	void CheckTimeSync(float DeltaTime);
+
+
+	/*
+	Return To MainMenu
+	*/
+	UPROPERTY(EditAnywhere,Category=Widget)
+	TSubclassOf<class UUserWidget> ReturnToMainMenuWidget;
+
+	UPROPERTY()
+	class UReturnToMainMenu* ReturnToMainMenu;
+
+	bool bReturnToMainMenuOpen = false;
+
+
 
 	UPROPERTY()
 	class ANoviceHUD* NoviceHUD;
@@ -89,9 +140,10 @@ private:
 	UFUNCTION()
 	void OnRep_MatchState();
 
-	void HandleMatchHasStarted();
+
 	void HandleCooldown();
 
+	
 	UPROPERTY()
 	class UCharacterOverlay* CharacterOverlay;/// to initialize the character overlay after 10 seconds of waiting time
 
@@ -127,7 +179,10 @@ private:
 	float HighPingDuration = 5.f;
 
 	UPROPERTY(EditAnywhere)
-	float CheckPingFrequency = 10.f;
+	float CheckPingFrequency = 20.f;
+
+	UFUNCTION(Server,Reliable)
+	void ServerReportPingStatus(bool bHighPing);
 
 	UPROPERTY(EditAnywhere)
 	float HighPingThreshold = 50.f;

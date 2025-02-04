@@ -9,10 +9,13 @@
 #include "Blaster/Interfaces/InteractWithCrosshairsInterface.h"
 #include "Blaster/Enums/CombatStates.h"
 #include "Components/TimelineComponent.h"
+#include "Blaster/Enums/Trams.h"
 #include "NoviceCharacter.generated.h"
 
 
+
 //DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FReverseTimeDelegate, bool, bReverseTime);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLeftGame);
 
 class UInputMappingContext;
 class UInputAction;
@@ -31,17 +34,21 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const  override;
 	virtual void PostInitializeComponents() override;
+
+	/*Play Montages*/
 	void PlayFireMontage(bool bAiming);
 	void PlayElimMontage();
 	void PlayReloadMontage();
-	void Elim();
+	void PlaySwapWeaponMontage();
+
+	void Elim(bool bPlayerLeftGame);
 	void DropOrDestroyWeapons();
 	void DropOrDestroyWeapon(AWeapon* Weapon);
 	void PlayThrowGrenadeMontage();
 	UPROPERTY(Replicated)
 	bool bDisableGameplay = false;
 	UFUNCTION(NetMulticast,Reliable)
-	void MulticastElim();
+	void MulticastElim(bool bPlayerLeftGame);
 
 	UFUNCTION(BlueprintImplementableEvent)
 	void ShowSniperScopeWidget(bool bShowScope);
@@ -51,6 +58,9 @@ public:
 	void UpdateHUDShield();
 
 	void UpdateHUDAmmo();
+	void SetTeamColor(ETeams Team);
+
+	void ChangeMeshMaterialAccToTeam(UMaterialInstance* HairMaterial, UMaterialInstance* ClothMaterial);
 
 
 	virtual void OnRep_ReplicatedMovement() override;// its replicated variable is ReplicatedMovement
@@ -109,6 +119,13 @@ public:
 
 	UPROPERTY()
 	TMap<FName, UBoxComponent*> HitCollisionBoxes;
+
+
+
+	UFUNCTION(NetMulticast,Reliable)
+	void MulticastGainedTheLead();
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastLostTheLead();
 protected:
 	
 	virtual void BeginPlay() override;
@@ -133,11 +150,20 @@ protected:
 	void StopSprinting();
 	void ReloadButtonPressed();
 	void GrenadeButtonPressed();
-
+	void StartGame();
 	UFUNCTION()
 	void ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, class AController* InstigatorController, AActor* DamageCauser);
 	//poll for any relevant classes and initialize our HUD
 	void PollInit();
+
+	void OnPlayerStateInitialize();
+
+	UPROPERTY(EditAnywhere)
+	class UNiagaraSystem* CrownSystem;
+
+	UPROPERTY()
+	class UNiagaraComponent* CrownComponent;
+ 
 private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputMappingContext* DefaultMappingContext;
@@ -175,14 +201,17 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputAction* GrenadeThrowAction;
 
-	UPROPERTY(VisibleAnywhere,Category=Camera)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* StartGameAction;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	class USpringArmComponent* CameraBoom;
 
-	UPROPERTY(VisibleAnywhere, Category = Camera)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	class UCameraComponent* FollowCamera;
 
-
-
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
+	class USceneComponent* ADSScene;
 	/*
 	Grenade Mesh
 	*/
@@ -196,7 +225,12 @@ private:
 	float SprintSpeed = 1000.f;
 
 	UPROPERTY()
+	class ABlasterGameMode*  BlasterGameMode;
+
+	UPROPERTY()
 	class ANovicePlayerController* NovicePlayerController;
+
+
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	class UWidgetComponent* OverheadWidget;
@@ -205,10 +239,15 @@ private:
 	 AWeapon* OverlappingWeapon;
 	//this is the conviction of the function to declare it
 
+
+	 UPROPERTY()
+	 class ALobbyGameMode* LobbyGameMode;
 	 /*
 	 Components
 	 */
-	 UPROPERTY(VisibleAnywhere,BlueprintReadOnly,meta=(AllowPrivateAccess="true"))
+
+ 
+	 UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	 class UCombatComponent* Combat;
 
 	 UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
@@ -233,6 +272,11 @@ private:
 
 	 UPROPERTY(EditAnywhere, Category = Combat)
 	 class UAnimMontage* GrenadeThrowMontage;
+
+
+	 UPROPERTY(EditAnywhere, Category = Combat)
+	 class UAnimMontage* SwapWeaponMontage;
+
 
 	UFUNCTION()
 	void OnRep_OverlappingWeapon(AWeapon* LastWeapon);//RepNotify functions its get call perpetually when variable is replicated
@@ -331,9 +375,11 @@ private:
 	UPROPERTY(VisibleAnywhere,Category= Elim)
 	UMaterialInstanceDynamic* DynamicDissolveMaterialInstance;//to store the dynamic istance that we create
 
+	 
 	//Material instance set on the Blueprint , used with the dynamic material instance
 	UPROPERTY(EditAnywhere, Category = Elim)
 	UMaterialInstance* DissolveMaterialInstance;//set this on blueprint
+ 
 
 	UPROPERTY(VisibleAnywhere, Category = Elim)
 	UMaterialInstanceDynamic* DynamicDissolveMaterialInstanceEye;//to store the dynamic istance that we create
@@ -359,11 +405,38 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = Elim)
 	UMaterialInstanceDynamic* DynamicDissolveMaterialInstanceCloth;//to store the dynamic istance that we create
 
+
 	//Material instance set on the Blueprint , used with the dynamic material instance
 	UPROPERTY(EditAnywhere, Category = Elim)
 	UMaterialInstance* DissolveMaterialInstanceCloth;//set this on blueprint
 
 
+	UPROPERTY(VisibleAnywhere, Category = Elim)
+	UMaterialInstanceDynamic* PurpleDynamicDissolveMaterialInstanceCloth;
+
+	UPROPERTY(EditAnywhere, Category = Elim)
+	UMaterialInstance* PurpleDissolveMaterialInstanceCloth;
+
+
+	UPROPERTY(VisibleAnywhere, Category = Elim)
+	UMaterialInstanceDynamic* PurpleDynamicDissolveMaterialInstanceHair;//to store the dynamic istance that we create
+
+	//Material instance set on the Blueprint , used with the dynamic material instance
+	UPROPERTY(EditAnywhere, Category = Elim)
+	UMaterialInstance* PurpleDissolveMaterialInstanceHair;//set this on blueprint
+
+	UPROPERTY(EditAnywhere, Category = MyBP)
+	UMaterialInstance* HairMaterialRedTeam;
+
+	UPROPERTY(EditAnywhere, Category = MyBP)
+	UMaterialInstance* ClothMaterialRedTeam;
+
+
+	UPROPERTY(EditAnywhere, Category = MyBP)
+	UMaterialInstance* HairMaterialBlueTeam;
+
+	UPROPERTY(EditAnywhere, Category = MyBP)
+	UMaterialInstance* ClothMaterialBlueTeam;
 
 	/*
 	Elim Bot
@@ -384,13 +457,39 @@ private:
 	TSubclassOf<AWeapon> DefaultWeaponClass;
 
 	void SpawnDefaultWeapon();
+
+	void ADSSightOn();
+	void ADSSightOff();
+
+	bool bLeftGame = false;
+
+	 
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<AWeapon> WeaponClass;
 public:	
+
+	FOnLeftGame OnLeftGame;
+
+	UFUNCTION(server, Reliable)
+	void ServerLeaveGame();
+
+	UPROPERTY(BlueprintReadWrite)
+	AWeapon* ADSWeapon;
+
+	UFUNCTION(BlueprintImplementableEvent)
+	void SetADSWeaponWorldLocation();
+
 	void SetOverlappingWeapon(AWeapon* Weapon);
 	 bool IsWeaponEquipped();
 	 bool IsAiming();
+	 void SetSpawnPoint();
+
+	 
+	 bool bFinishSwapping =false;
 
 	 FORCEINLINE float GetAO_Yaw() const { return AO_Yaw; }
 	 FORCEINLINE float GetAO_Pitch() const { return AO_Pitch; }
+	 UFUNCTION(BlueprintCallable)
 	 AWeapon* GetEquippedWeapon();
 	 FORCEINLINE ETurningInPlace GetTurningInPlace() const { return TurningInPlace; }
 	 FVector GetHitTarget() const ;
@@ -414,6 +513,10 @@ public:
 	 FORCEINLINE float GetMaxShield() const { return MaxShield; }
 	 FORCEINLINE float GetShield() const { return Shield; }
 	 FORCEINLINE void SetShield(float Amount) { Shield = Amount; }
+	 FORCEINLINE bool  IsHoldingTheFlag() const; 
 	 bool IsLocallyReloading();
 	 FORCEINLINE ULagCompensationComponent* GetLagCompensationComponent() const { return LagCompensation; }
+	 ETeams GetTeam();
+
+	 void SetbIsHoldingTheFlag(bool bHolding);
 };

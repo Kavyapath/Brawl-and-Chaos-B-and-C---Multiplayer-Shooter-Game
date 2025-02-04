@@ -7,6 +7,7 @@
 #include "Net/UnrealNetwork.h"
 
 
+
 void ANovicePlayerState::AddToScore(float ScoreAmount)
 {
 	SetScore(GetScore() + ScoreAmount);
@@ -43,6 +44,7 @@ void ANovicePlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	//Register the variable that you want to replicate here in this function
 
 	DOREPLIFETIME(ANovicePlayerState, Defeats);
+	DOREPLIFETIME(ANovicePlayerState,Team);
 }
 
 void ANovicePlayerState::OnRep_Defeats()
@@ -70,6 +72,25 @@ void ANovicePlayerState::OnRep_Score()
 			Controller->SetHUDScore(GetScore());//Once the score is replicated we want to update the HUD,calling on the client
 		}
 	}
+}
+
+void ANovicePlayerState::OnRep_Team()
+{
+	ANoviceCharacter*  Character = Cast<ANoviceCharacter>(GetPawn());
+	if ( Character)
+	{
+		 Character->SetTeamColor(Team);
+	}
+}
+
+void ANovicePlayerState::SetTeam(ETeams TeamToSet)
+{
+	 Team = TeamToSet; 
+	 ANoviceCharacter*  Character = Cast<ANoviceCharacter>(GetPawn());
+	 if ( Character)
+	 {
+		  Character->SetTeamColor(TeamToSet);
+	 }
 }
 
 

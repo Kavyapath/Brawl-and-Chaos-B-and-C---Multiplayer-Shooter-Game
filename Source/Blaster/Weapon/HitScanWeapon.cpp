@@ -9,10 +9,13 @@
 #include "Particles/ParticleSystemComponent.h"
 #include "Sound/SoundCue.h"
 #include "WeaponTypes.h"
+#include "Blaster/BlasterComponent/LagCompensationComponent.h"
+#include "Blaster/PlayerController/NovicePlayerController.h"
 
 void AHitScanWeapon::Fire(const FVector& HitTarget)
 {
 	Super::Fire(HitTarget);
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
 	const USkeletalMeshSocket* MuzzleFlashSocket = GetWeaponMesh()->GetSocketByName("MuzzleFlash");
 	if (MuzzleFlashSocket)
 	{
@@ -24,17 +27,30 @@ void AHitScanWeapon::Fire(const FVector& HitTarget)
 			WeaponTraceHit(Start, End, FireHit);
 
 			ANoviceCharacter* NoviceCharacter = Cast<ANoviceCharacter>(FireHit.GetActor());
-			if (NoviceCharacter && HasAuthority() && GetInstigatorController())
+			if (NoviceCharacter && GetInstigatorController())
 			{
+				bool bCauseAuthDamage = !bUseServerSideRewind || OwnerPawn->IsLocallyControlled();
+				if (HasAuthority() && bCauseAuthDamage)
+				{
+					const float DamageToCause = (FireHit.BoneName.ToString() == FString("head") || FireHit.BoneName.ToString() == FString("PonyTail") || FireHit.BoneName.ToString() == FString("bangs")) ? HeadShotDamage : Damage;
 
-				UGameplayStatics::ApplyDamage(
-					NoviceCharacter,
-					Damage,
-					GetInstigatorController(),
-					this,
-					UDamageType::StaticClass()
-				);
-
+					UGameplayStatics::ApplyDamage(
+						NoviceCharacter,
+						DamageToCause,
+						GetInstigatorController(),
+						this,
+						UDamageType::StaticClass()
+					);
+				}
+				else if (!HasAuthority() && bUseServerSideRewind)
+				{
+					NoviceOwnerCharacter = NoviceOwnerCharacter == nullptr ? Cast<ANoviceCharacter>(GetOwner()) : NoviceOwnerCharacter;
+					NoviceOwnerController = NoviceOwnerController == nullptr ? Cast<ANovicePlayerController>(GetInstigatorController()):NoviceOwnerController;
+					if (NoviceOwnerCharacter && NoviceOwnerController && NoviceOwnerCharacter->GetLagCompensationComponent() && NoviceOwnerCharacter->IsLocallyControlled())
+					{
+						NoviceOwnerCharacter->GetLagCompensationComponent()->ServerScoreRequest(NoviceCharacter,Start,HitTarget,NoviceOwnerController->GetServerTime()- NoviceOwnerController->SingleTripTime,this);
+					}
+				}
 			}
 			if (ImpactParticle)
 			{

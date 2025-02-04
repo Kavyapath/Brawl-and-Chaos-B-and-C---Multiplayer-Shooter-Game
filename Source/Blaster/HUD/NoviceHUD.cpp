@@ -4,6 +4,11 @@
 #include "NoviceHUD.h"
 #include "CharacterOverlay.h"
 #include "Announcement.h"
+#include "ElimAnnouncement.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
+#include "Components/HorizontalBox.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/WidgetSwitcherSlot.h"
 
 void ANoviceHUD::DrawHUD()
 {
@@ -48,9 +53,56 @@ void ANoviceHUD::AddAnnouncement()
 	}
 }
 
+void ANoviceHUD::AddElimAnnouncement(FString AttackerName, FString VictimName)
+{
+	OwningPlayerController = OwningPlayerController == nullptr ? GetOwningPlayerController() : OwningPlayerController;
+	if (OwningPlayerController && ElimAnnouncementClass)
+	{
+		UElimAnnouncement* ElimAnnouncement = CreateWidget<UElimAnnouncement>(OwningPlayerController,ElimAnnouncementClass);
+		if (ElimAnnouncement)
+		{
+			ElimAnnouncement->SetElimAnnouncementText(AttackerName,VictimName);
+			
+			//ElimAnnouncement->AddToViewport();
+
+			CharacterOverlay->EliminationAnnouncementFeed->AddChild(ElimAnnouncement);
+			
+			/*
+			for (UElimAnnouncement* Msg : ElimMessages)
+			{
+				if (Msg &&  Msg->AnnouncementBox)
+				{
+					UCanvasPanelSlot* CanvasSlot = UWidgetLayoutLibrary::SlotAsCanvasSlot(Msg);
+					 
+					
+					if (CanvasSlot)
+					{
+						FVector2D Position = CanvasSlot->GetPosition();
+						FVector2D NewPosition(CanvasSlot->GetPosition().X, Position.Y - CanvasSlot->GetSize().Y);
+						CanvasSlot->SetPosition(NewPosition);
+					
+					}
+						
+				}
+			}
+			*/
+			ElimMessages.Add(ElimAnnouncement);
+
+			FTimerHandle ElimMsgTimer;
+			 
+			FTimerDelegate ElimMsgDelegate;
+
+			ElimMsgDelegate.BindUFunction(this, FName("ElimAnnouncementTimerFinished"), ElimAnnouncement);
+			GetWorldTimerManager().SetTimer(ElimMsgTimer, ElimMsgDelegate, ElimAnnouncementTime, false);
+		}
+	}
+	
+}
+
 void ANoviceHUD::BeginPlay()
 {
 	Super::BeginPlay();
+ 
 	
 }
 
@@ -83,4 +135,13 @@ void ANoviceHUD::DrawCrosshairs(UTexture2D* Texture, FVector2D ViewportCentre, F
 		1.f,
 		1.f,
 		CrosshairsColor);
+}
+
+void ANoviceHUD::ElimAnnouncementTimerFinished(UElimAnnouncement* MsgToRemove)
+{
+	if (MsgToRemove && CharacterOverlay)
+	{
+		MsgToRemove->RemoveFromParent();
+		CharacterOverlay->EliminationAnnouncementFeed->RemoveChild(MsgToRemove);
+	}
 }

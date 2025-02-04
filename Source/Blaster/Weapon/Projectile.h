@@ -16,6 +16,28 @@ public:
 	AProjectile();
 	virtual void Tick(float DeltaTime) override;
 	virtual  void Destroyed() override;//this function is already replicated so we gonna use it for replication
+	
+	/*
+	Used with ssr
+	*/
+	bool bUseServerSideRewind=false;
+	FVector_NetQuantize TraceStart;
+	FVector_NetQuantize100 InitialVelocity;
+
+	UPROPERTY(EditAnywhere)
+	float InitialSpeed = 20000.f;
+
+	//Only Set this for grenade and Rocket
+	UPROPERTY(EditAnywhere)
+	float Damage = 10.f;
+
+
+	UPROPERTY(EditAnywhere)
+	float HeadShotDamage = 25.f;
+	
+
+
+
 protected:
 
 	virtual void BeginPlay() override;
@@ -30,8 +52,6 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	class UProjectileMovementComponent* ProjectileMovementComponent;
 	
-	UPROPERTY(EditAnywhere)
-	float Damage=10.f;
 
 	UPROPERTY(VisibleAnywhere)
 	UStaticMeshComponent* ProjectileMesh;

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/VerticalBox.h"
 #include "CharacterOverlay.generated.h"
 
 /**
@@ -23,6 +24,9 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 	class UTextBlock* HealthText;
+
+	UPROPERTY(meta = (BindWidget))
+	 UVerticalBox* EliminationAnnouncementFeed;
 
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* ShieldText;
@@ -49,9 +53,20 @@ public:
 	 UTextBlock* GrenadeAmount;
 
 	 UPROPERTY(meta = (BindWidget))
+	 UTextBlock* RedTeamScoreText;
+	
+	 UPROPERTY(meta = (BindWidget))
+	 UTextBlock* BlueTeamScoreText;
+
+	 UPROPERTY(meta = (BindWidget))
+	 UTextBlock* Spacer;
+
+	 UPROPERTY(meta = (BindWidget))
 	 class UImage* HighPingImage;
 
 	 UPROPERTY(meta = (BindWidgetAnim), Transient)
 	 UWidgetAnimation* HighPingAnimation;
+
+
 
 };
